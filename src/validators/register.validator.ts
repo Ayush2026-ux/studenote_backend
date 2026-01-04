@@ -4,6 +4,7 @@ export const registerSchema = z
     .object({
         username: z
             .string()
+            .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores")
             .min(3, "Username must be at least 3 characters"),
 
         fullName: z
@@ -12,7 +13,9 @@ export const registerSchema = z
 
         email: z
             .string()
+            .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Invalid email address")
             .email("Invalid email address"),
+
 
         mobile: z
             .string()
@@ -20,48 +23,9 @@ export const registerSchema = z
 
         password: z
             .string()
+            .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{6,}$/, "Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character")
             .min(6, "Password must be at least 6 characters"),
-
-        course: z
-            .string()
-            .min(2, "Course is required"),
-
-        institution: z.enum(["COLLEGE", "SCHOOL"]),
-
-        year: z
-            .number()
-            .int()
-            .min(1)
-            .max(6)
-            .optional(),
-
-        class: z
-            .string()
-            .optional(),
-
-        location: z
-            .string()
-            .min(2, "Location is required"),
     })
-    .superRefine((data, ctx) => {
-        // College rule
-        if (data.institution === "COLLEGE" && !data.year) {
-            ctx.addIssue({
-                path: ["year"],
-                message: "Year is required for college",
-                code: z.ZodIssueCode.custom,
-            });
-        }
-
-        // School rule
-        if (data.institution === "SCHOOL" && !data.class) {
-            ctx.addIssue({
-                path: ["class"],
-                message: "Class is required for school",
-                code: z.ZodIssueCode.custom,
-            });
-        }
-    });
 
 /**
  * Type inference for strong typing

@@ -1,4 +1,4 @@
-import bcrypt from "bcryptjs";
+import bcrypt from "bcrypt";
 import User from "../../models/users/users.models";
 
 export const registerUser = async (data: any) => {
@@ -11,12 +11,8 @@ export const registerUser = async (data: any) => {
             email: data.email,
             mobile: data.mobile,
             password: hashedPassword,
-            course: data.course,
-            institution: data.institution,
-            year: data.year,
-            class: data.class, // or className if renamed
-            location: data.location,
         });
+
 
         return user;
     } catch (err: any) {

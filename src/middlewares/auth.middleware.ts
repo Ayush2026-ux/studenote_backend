@@ -1,13 +1,21 @@
-import jwt from 'jsonwebtoken';
+import jwt from "jsonwebtoken";
 
-export const authMiddleware = (req: any, res: any, next: any) => {
-    try {
-        const token = req.headers.authorization?.split(' ')[1];
-        if (!token) return res.sendStatus(401);
-
-        req.user = jwt.verify(token, process.env.JWT_SECRET as string);
-        next();
-    } catch {
-        return res.status(401).json({ code: 'TOKEN_EXPIRED' });
+export const generateAccessToken = (payload: object) => {
+    if (!process.env.JWT_ACCESS_SECRET) {
+        throw new Error("JWT_ACCESS_SECRET is missing");
     }
+
+    return jwt.sign(payload, process.env.JWT_ACCESS_SECRET, {
+        expiresIn: "15m",
+    });
+};
+
+export const generateRefreshToken = (payload: object) => {
+    if (!process.env.JWT_REFRESH_SECRET) {
+        throw new Error("JWT_REFRESH_SECRET is missing");
+    }
+
+    return jwt.sign(payload, process.env.JWT_REFRESH_SECRET, {
+        expiresIn: "7d",
+    });
 };
