@@ -1,5 +1,6 @@
 import User from "../../models/users/users.models";
 
+
 export const logoutUser = async (userId: string) => {
     const user = await User.findById(userId);
 

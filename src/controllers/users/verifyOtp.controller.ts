@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import User from "../../models/users/users.models";
 import { generateAccessToken } from "../../utils/jwt";
 
+
 export const verifyOtpController = async (req: Request, res: Response) => {
   try {
     const { userId, otp } = req.body;
