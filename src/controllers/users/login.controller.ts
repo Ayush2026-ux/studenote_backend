@@ -1,56 +1,69 @@
 import { Request, Response } from "express";
-import jwt from "jsonwebtoken";
-import { generateAccessToken } from "../../utils/jwt";
-import { loginUser } from "../../services/users/login.service";
+import bcrypt from "bcryptjs";
+import User from "../../models/users/users.models";
+import { generateOtp } from "../../utils/generateOtp";
+import { sendOtpMail } from "../../services/mail/otp.mail";
 
 export const login = async (req: Request, res: Response) => {
-    try {
-        const { email, password } = req.body;
+  try {
+    const { email, password } = req.body;
 
-        if (!email || !password) {
-            return res.status(400).json({
-                success: false,
-                message: "Email and password are required",
-            });
-        }
-
-        const data = await loginUser(email, password);
-        console.log(data);
-
-        return res.status(200).json({
-            success: true,
-            message: "Login successful",
-            accessToken: data.accessToken,
-            refreshToken: data.refreshToken,
-            user: data.user,
-        });
-    } catch (error: any) {
-        return res.status(401).json({
-            success: false,
-            message: error.message || "Invalid credentials",
-        });
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and password are required",
+      });
     }
-};
 
-export const refreshAccessToken = (req: Request, res: Response) => {
-    try {
-        const { refreshToken } = req.body;
-
-        if (!refreshToken) {
-            return res.status(400).json({ message: "Refresh token required" });
-        }
-
-        const decoded = jwt.verify(
-            refreshToken,
-            process.env.JWT_REFRESH_SECRET as string
-        ) as { userId: string };
-
-        const newAccessToken = generateAccessToken({
-            userId: decoded.userId,
-        });
-
-        res.json({ accessToken: newAccessToken });
-    } catch {
-        res.status(401).json({ message: "Refresh token expired. Login again." });
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
     }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials",
+      });
+    }
+
+    // 🔐 Generate OTP
+    const otp = generateOtp();
+    user.otp = otp;
+    user.otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+    await user.save();
+
+    // 📧 Send OTP email (SAFE)
+    try {
+      await sendOtpMail(user.email, otp);
+    } catch (mailError) {
+      console.error("OTP MAIL ERROR:", mailError);
+
+      // rollback OTP
+      user.otp = undefined;
+      user.otpExpiry = undefined;
+      await user.save();
+
+      return res.status(500).json({
+        success: false,
+        message: "Failed to send OTP email. Please try again.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "OTP sent to your email",
+      userId: user._id,
+    });
+  } catch (error: any) {
+    console.error("LOGIN ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Login failed",
+    });
+  }
 };

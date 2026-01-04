@@ -3,21 +3,24 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import routes from './routes/users/auth.routes';
+
 const app = express();
 
 // Middlewares
-app.use(cors());
+app.use(cors({
+  origin: '*',
+}));
 app.use(helmet());
 app.use(express.json());
 
-// Morgan logger (DEV)
+// Logger
 app.use(morgan('dev'));
 
 // Routes
 app.use('/api', routes);
 
-app.get('/', (_req, res) => {
-    res.json({ message: 'API running 🚀' });
+app.get('/api', (_req, res) => {
+  res.json({ message: 'API running 🚀' });
 });
 
 export default app;

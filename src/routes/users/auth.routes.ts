@@ -1,19 +1,25 @@
-import { Router } from 'express';
-import { registerController } from '../../controllers/users/register.controller';
-import { login, refreshAccessToken } from '../../controllers/users/login.controller';
-import { protect } from '../../middlewares/logout.middlewere';
-import { logout } from '../../controllers/users/logout.controller';
+import { Router } from "express";
+import { registerController } from "../../controllers/users/register.controller";
+import { login } from "../../controllers/users/login.controller";
+import { verifyOtpController } from "../../controllers/users/verifyOtp.controller";
+import { protect } from "../../middlewares/logout.middlewere";
+import { logout } from "../../controllers/users/logout.controller";
+import { forgotPassword } from "../../controllers/users/forgotPassword.controller";
+import { verifyForgotOtp } from "../../controllers/users/verifyForgotOtp.controller";
+import { resetPassword } from "../../controllers/users/resetPassword.controller";
 
 
 const router = Router();
 
-// Auth Routes 
-router.post('/register', registerController);
-router.post('/login', login);
-router.post('/refresh', refreshAccessToken);
+router.post("/forgot-password", forgotPassword);
+router.post("/verify-forgot-otp", verifyForgotOtp);
+router.post("/reset-password", resetPassword);
 
-// Protected route for logout
-router.post('/logout', protect, logout);
+
+router.post("/register", registerController);
+router.post("/login", login);
+router.post("/verify-otp", verifyOtpController);
+router.post("/logout", protect, logout);
 
 
 
