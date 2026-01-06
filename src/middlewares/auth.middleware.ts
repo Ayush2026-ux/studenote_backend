@@ -1,21 +1,28 @@
+import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
-export const generateAccessToken = (payload: object) => {
-    if (!process.env.JWT_ACCESS_SECRET) {
-        throw new Error("JWT_ACCESS_SECRET is missing");
+export const authGuard = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
-    return jwt.sign(payload, process.env.JWT_ACCESS_SECRET, {
-        expiresIn: "15m",
-    });
-};
+    const token = authHeader.split(" ")[1];
 
-export const generateRefreshToken = (payload: object) => {
-    if (!process.env.JWT_REFRESH_SECRET) {
-        throw new Error("JWT_REFRESH_SECRET is missing");
-    }
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_ACCESS_SECRET as string
+    ) as any;
 
-    return jwt.sign(payload, process.env.JWT_REFRESH_SECRET, {
-        expiresIn: "7d",
-    });
+    (req as any).user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ message: "Invalid token" });
+  }
 };

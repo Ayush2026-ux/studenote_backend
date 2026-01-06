@@ -1,31 +1,34 @@
+import dotenv from "dotenv";
+import app from "./app";
+import connectToMongo from "./config/mongodb";
+import path from "path";
 
-import dotenv from 'dotenv';
-import app from './app';
-import connectToMongo from './config/mongodb';
-import path from 'path';
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
-
-// 🔥 FIX: Convert PORT to number
 const PORT = Number(process.env.PORT) || 4000;
 
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-});
+const startServer = async () => {
+  try {
+    // 1️⃣ Connect DB first
+    await connectToMongo();
 
-connectToMongo();
+    // 2️⃣ Start server only if DB connected
+    const server = app.listen(PORT, "0.0.0.0", () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+    });
 
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received. Shutting down...');
-  server.close(() => process.exit(0));
-});
+    // Graceful shutdown
+    const shutdown = () => {
+      console.log("🔴 Shutting down...");
+      server.close(() => process.exit(0));
+    };
 
-process.on('SIGINT', () => {
-  console.log('SIGINT received. Shutting down...');
-  server.close(() => process.exit(0));
-});
+    process.on("SIGTERM", shutdown);
+    process.on("SIGINT", shutdown);
+  } catch (err) {
+    console.error("❌ Failed to start server", err);
+    process.exit(1);
+  }
+};
 
-
-
-// console.log("JWT_ACCESS_SECRET =", process.env.JWT_ACCESS_SECRET);
-// console.log("JWT_REFRESH_SECRET =", process.env.JWT_REFRESH_SECRET);
+startServer();
