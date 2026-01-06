@@ -39,18 +39,26 @@ const userSchema = new mongoose.Schema(
     },
 
     // 🔑 login type
-    provider: {
+     provider: {
       type: String,
       enum: ["local", "google"],
       default: "local",
     },
+    avatar: {
+      type: String,
+    },
 
-    // 🔐 OTP fields
+    //  OTP fields
     otp: {
       type: String,
     },
     otpExpiry: {
       type: Date,
+    },
+    role: {
+      type: String,
+      enum: ["user", "admin"],
+      default: "user",
     },
   },
   { timestamps: true }

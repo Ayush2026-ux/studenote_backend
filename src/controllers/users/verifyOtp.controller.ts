@@ -13,7 +13,8 @@ export const verifyOtpController = async (req: Request, res: Response) => {
       return res.status(400).json({ message: "OTP expired" });
     }
 
-    if (user.otp !== otp) {
+    // ✅ OTP comparison FIX (already correct)
+    if (String(user.otp) !== String(otp)) {
       return res.status(400).json({ message: "Invalid OTP" });
     }
 
@@ -26,19 +27,23 @@ export const verifyOtpController = async (req: Request, res: Response) => {
     user.otpExpiry = undefined;
     await user.save();
 
-    // 🔐 Issue JWT AFTER OTP verification
-    const accessToken = generateAccessToken({
+    // 🔐 JWT
+    const token = generateAccessToken({
       userId: user._id,
     });
 
     return res.status(200).json({
       success: true,
       message: "OTP verified successfully",
-      accessToken,
+      token, // 🔑 FIXED (was accessToken)
       user: {
-        id: user._id,
+        _id: user._id,
         email: user.email,
         fullName: user.fullName,
+        mobile: user.mobile,
+        role: user.role,
+        provider: user.provider,
+        avatar: user.avatar,
       },
     });
   } catch (error) {
@@ -46,3 +51,4 @@ export const verifyOtpController = async (req: Request, res: Response) => {
     return res.status(500).json({ message: "OTP verification failed" });
   }
 };
+

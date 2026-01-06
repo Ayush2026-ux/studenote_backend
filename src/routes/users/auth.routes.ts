@@ -9,6 +9,7 @@ import { logout } from "../../controllers/users/logout.controller";
 import { forgotPassword } from "../../controllers/users/forgotPassword.controller";
 import { verifyForgotOtp } from "../../controllers/users/verifyForgotOtp.controller";
 import { resetPassword } from "../../controllers/users/resetPassword.controller";
+import { googleLogin } from "../../controllers/users/googlelogin.controller";
 
 // Upload / Admin
 import { upload } from "../../middlewares/multer";
@@ -18,6 +19,8 @@ import { adminAuth } from "../../middlewares/adminAuth.middleware";
 
 const router = Router();
 
+/* ---------------- AUTH ROUTES ---------------- */
+router.post("/auth/google", googleLogin);
 router.post("/forgot-password", forgotPassword);
 router.post("/verify-forgot-otp", verifyForgotOtp);
 router.post("/reset-password", resetPassword);
