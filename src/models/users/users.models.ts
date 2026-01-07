@@ -2,11 +2,11 @@ import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
   {
-    // ❌ Google user ke liye optional
     username: {
       type: String,
       unique: true,
-      sparse: true, // ✅ allow null for google users
+      sparse: true,
+      lowercase: true,
       trim: true,
     },
 
@@ -23,6 +23,7 @@ const userSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
+      index: true,
     },
 
     mobile: {
@@ -34,35 +35,52 @@ const userSchema = new mongoose.Schema(
 
     password: {
       type: String,
-      required: true,
       minlength: 6,
+      required: function (this: any) {
+        return this.provider === "local";
+      },
     },
 
-    // 🔑 login type
-     provider: {
+    provider: {
       type: String,
       enum: ["local", "google"],
       default: "local",
     },
+
     avatar: {
       type: String,
     },
 
-    //  OTP fields
-    otp: {
-      type: String,
+    // 🔐 OTP fields
+    otp: String,
+    otpExpiry: Date,
+    otpAttempts: {
+      type: Number,
+      default: 0,
     },
-    otpExpiry: {
-      type: Date,
+    lastOtpSentAt: Date,
+
+    isEmailVerified: {
+      type: Boolean,
+      default: false,
     },
+
     role: {
       type: String,
       enum: ["user", "admin"],
       default: "user",
     },
+
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );
+
+userSchema.index({ email: 1 });
+userSchema.index({ username: 1 });
 
 const User = mongoose.model("User", userSchema);
 export default User;

@@ -40,11 +40,13 @@ export const verifyOtpController = async (req: Request, res: Response) => {
         _id: user._id,
         email: user.email,
         fullName: user.fullName,
+        username: user.username, // ✅ ADD THIS LINE
         mobile: user.mobile,
         role: user.role,
         provider: user.provider,
         avatar: user.avatar,
       },
+
     });
   } catch (error) {
     console.error("VERIFY OTP ERROR:", error);

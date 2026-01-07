@@ -16,6 +16,12 @@ import { upload } from "../../middlewares/multer";
 import { uploadFile } from "../../controllers/users/upload.controller";
 import { deleteFile } from "../../controllers/users/delete.controller";
 import { adminAuth } from "../../middlewares/adminAuth.middleware";
+import { authGuard } from "../../middlewares/auth.middleware";
+
+import { sendChangePasswordOtp } from "../../controllers/users/sendChangePasswordOtp.controller";
+import { changePasswordController } from "../../controllers/users/changePassword.controller";
+
+
 
 const router = Router();
 
@@ -27,9 +33,10 @@ router.post("/reset-password", resetPassword);
 
 
 router.post("/register", registerController);
-router.post("/login", login);
+router.post("/login",login);
 router.post("/verify-otp", verifyOtpController);
-router.post("/logout", protect, logout);
+router.post("/logout", authGuard, logout);
+
 
 
 
@@ -46,6 +53,19 @@ router.delete(
   "/admin/delete-file",
   adminAuth,
   deleteFile
+);
+
+/* -------- PASSWORD UPDATE -------- */
+router.post(
+  "/user/change-password-otp",
+  authGuard,
+  sendChangePasswordOtp
+);
+
+router.post(
+  "/user/change-password",
+  authGuard,
+  changePasswordController
 );
 
 export default router;
