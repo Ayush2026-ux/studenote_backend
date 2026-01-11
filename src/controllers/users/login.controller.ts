@@ -4,11 +4,27 @@ import User from "../../models/users/users.models";
 import { generateOtp } from "../../utils/generateOtp";
 import { sendOtpMail } from "../../services/mail/otp.mail";
 
+/* =====================================================
+   LOGIN CONTROLLER (OTP BASED)
+   STEP 1: Email + Password → Send OTP
+===================================================== */
+
 export const login = async (req: Request, res: Response) => {
   try {
-    const email = req.body.email?.toLowerCase().trim();
-    const { password } = req.body;
+    /* ================= SAFE BODY ================= */
+    const body = req.body || {};
 
+    const email =
+      typeof body.email === "string"
+        ? body.email.toLowerCase().trim()
+        : "";
+
+    const password =
+      typeof body.password === "string"
+        ? body.password
+        : "";
+
+    /* ================= BASIC VALIDATION ================= */
     if (!email || !password) {
       return res.status(400).json({
         success: false,
@@ -16,7 +32,9 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
-    const user = await User.findOne({ email });
+    /* ================= FIND USER ================= */
+    const user = await User.findOne({ email }).select("+password");
+
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -24,7 +42,7 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ IMPORTANT: Google user safety
+    /* ================= GOOGLE USER SAFETY ================= */
     if (!user.password) {
       return res.status(400).json({
         success: false,
@@ -32,7 +50,9 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
+    /* ================= PASSWORD CHECK ================= */
     const isMatch = await bcrypt.compare(password, user.password);
+
     if (!isMatch) {
       return res.status(401).json({
         success: false,
@@ -40,25 +60,28 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ Reuse OTP if still valid
-    if (user.otp && user.otpExpiry && user.otpExpiry > new Date()) {
-      return res.status(200).json({
-        success: true,
-        message: "OTP already sent",
-        userId: user._id,
-        email: user.email,
+    /* ================= ACCOUNT STATUS ================= */
+    if (!user.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: "Account is disabled",
       });
     }
 
-    // ✅ Generate OTP (5 min)
+    /* ================= GENERATE OTP ================= */
     const otp = String(generateOtp());
+
     user.otp = otp;
-    user.otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
+    user.otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
     user.otpAttempts = 0;
     user.lastOtpSentAt = new Date();
+
     await user.save();
 
-    // ✅ Respond fast
+    // 🔴 DEV ONLY (remove in production)
+    console.log("LOGIN OTP:", otp);
+
+    /* ================= RESPONSE ================= */
     res.status(200).json({
       success: true,
       message: "OTP sent to your email",
@@ -66,11 +89,10 @@ export const login = async (req: Request, res: Response) => {
       email: user.email,
     });
 
-    // ✅ Send mail in background
+    /* ================= SEND OTP EMAIL (ASYNC) ================= */
     sendOtpMail(user.email, otp).catch((err) => {
       console.error("OTP MAIL ERROR:", err);
     });
-
   } catch (error) {
     console.error("LOGIN ERROR:", error);
     return res.status(500).json({

@@ -3,6 +3,7 @@ import { Router } from "express";
 // Auth controllers
 import { registerController } from "../../controllers/users/register.controller";
 import { login } from "../../controllers/users/login.controller";
+import { refreshTokenController } from "../../controllers/users/auth/refresh.controller";
 import { verifyOtpController } from "../../controllers/users/verifyOtp.controller";
 import { protect } from "../../middlewares/logout.middlewere";
 import { logout } from "../../controllers/users/logout.controller";
@@ -12,16 +13,29 @@ import { resetPassword } from "../../controllers/users/resetPassword.controller"
 import { googleLogin } from "../../controllers/users/googlelogin.controller";
 
 // Upload / Admin
-import { upload } from "../../middlewares/multer";
-import { uploadFile } from "../../controllers/users/upload.controller";
-import { deleteFile } from "../../controllers/users/delete.controller";
+
 import { adminAuth } from "../../middlewares/adminAuth.middleware";
 import { authGuard } from "../../middlewares/auth.middleware";
 
 import { sendChangePasswordOtp } from "../../controllers/users/sendChangePasswordOtp.controller";
 import { changePasswordController } from "../../controllers/users/changePassword.controller";
+import { updateProfile } from "../../controllers/users/updateProfile.controller";
 
 
+// Sessions & Login Activity
+
+import { getUserSessions } from "../../controllers/users/getSessions.controller";
+import { getLoginActivity } from "../../controllers/users/getLoginActivity.controller";
+import { revokeSession } from "../../controllers/users/revokeSession.controller";
+import { clearLoginActivity } from "../../controllers/users/clearLoginActivity.controller";
+
+
+
+
+
+// Login Alert Settings
+import { updateLoginAlert } from "../../controllers/users/updateLoginAlert.controller";
+import { getMeController } from "../../controllers/users/me.controller";
 
 const router = Router();
 
@@ -33,26 +47,24 @@ router.post("/reset-password", resetPassword);
 
 
 router.post("/register", registerController);
-router.post("/login",login);
+router.post("/login", login);
+router.post("/refresh", refreshTokenController);
 router.post("/verify-otp", verifyOtpController);
 router.post("/logout", authGuard, logout);
 
 
+/* ---------------- SESSIONS & LOGIN ACTIVITY ---------------- */
+
+router.get("/user/sessions", authGuard, getUserSessions);
+router.get("/user/login-activity", authGuard, getLoginActivity);
+router.post("/user/revoke-session/:sessionId", authGuard, revokeSession);
 
 
-/* ---------------- NOTES UPLOAD ---------------- */
-// 🔥 THIS IS THE IMPORTANT FIX
-router.post(
-  "/notes",
-  upload.single("file"),
-  uploadFile
-);
-
-/* ---------------- ADMIN ---------------- */
-router.delete(
-  "/admin/delete-file",
-  adminAuth,
-  deleteFile
+/* -------- PROFILE UPDATE -------- */
+router.patch(
+  "/user/profile",
+  authGuard,
+  updateProfile
 );
 
 /* -------- PASSWORD UPDATE -------- */
@@ -67,5 +79,28 @@ router.post(
   authGuard,
   changePasswordController
 );
+
+/* -------- LOGIN ALERT SETTINGS -------- */
+router.patch(
+  "/user/login-alert",
+  authGuard,
+  updateLoginAlert
+);
+
+
+
+
+/* -------- CURRENT USER -------- */
+
+router.get("/me", authGuard, getMeController);
+
+
+/* -------- LOGIN ACTIVITY -------- */
+router.delete(
+  "/user/login-activity",
+  authGuard,
+  clearLoginActivity
+);
+
 
 export default router;

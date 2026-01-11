@@ -1,19 +1,20 @@
 import { Request, Response, NextFunction } from "express";
 import jwt, { JwtPayload } from "jsonwebtoken";
+import User from "../models/users/users.models";
 
 export interface AuthRequest extends Request {
-  user?: JwtPayload | string;
+  user?: any;
 }
 
-export const authGuard = (
+export const authGuard = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
 ) => {
   try {
+    /* ================= AUTH HEADER ================= */
     const authHeader = req.headers.authorization;
 
-    // ❌ No token
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({
         success: false,
@@ -21,22 +22,46 @@ export const authGuard = (
       });
     }
 
-    const token = authHeader.split(" ")[1];
+    const accessToken = authHeader.split(" ")[1];
 
-    // 🔐 Verify token
+    /* ================= VERIFY ACCESS TOKEN ================= */
     const decoded = jwt.verify(
-      token,
-      process.env.JWT_ACCESS_SECRET as string
-    );
+      accessToken,
+      process.env.JWT_ACCESS_SECRET!
+    ) as JwtPayload & { _id?: string };
 
-    // ✅ Attach user to request
-    req.user = decoded;
+    if (!decoded || !decoded._id) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid access token payload",
+      });
+    }
+
+    /* ================= USER CHECK ================= */
+    const user = await User.findById(decoded._id).select("-password");
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: "Account is disabled",
+      });
+    }
+
+    /* ================= ATTACH USER ================= */
+    req.user = user;
 
     next();
   } catch (error) {
     return res.status(401).json({
       success: false,
-      message: "Invalid or expired token",
+      message: "Invalid or expired access token",
     });
   }
 };
