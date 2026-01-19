@@ -55,8 +55,8 @@ const userSchema = new mongoose.Schema(
     },
 
 
-      // ================= TOKENS ================= //
-      
+    // ================= TOKENS ================= //
+
     refreshToken: {
       type: String,
       select: false, // hide by default
@@ -112,6 +112,13 @@ const userSchema = new mongoose.Schema(
     loginAlertEnabled: {
       type: Boolean,
       default: true, // 🔔 ON by default
+    },
+
+    /* 🔔 EXPO PUSH TOKEN */
+    expoPushToken: {
+      type: String,
+      index: true,
+      default: null,
     },
 
     /* ================= SECURITY META ================= */

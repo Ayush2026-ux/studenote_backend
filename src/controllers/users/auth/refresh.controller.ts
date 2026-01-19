@@ -54,7 +54,7 @@ export const refreshTokenController = async (req: Request, res: Response) => {
 
     const newAccessToken = jwt.sign(
       { _id: user._id },
-      process.env.JWT_ACCESS_SECRET!,
+      process.env.JWT_SECRET!,
       { expiresIn: "40m" }
     );
 

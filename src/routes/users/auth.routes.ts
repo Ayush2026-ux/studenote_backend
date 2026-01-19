@@ -36,6 +36,7 @@ import { clearLoginActivity } from "../../controllers/users/clearLoginActivity.c
 // Login Alert Settings
 import { updateLoginAlert } from "../../controllers/users/updateLoginAlert.controller";
 import { getMeController } from "../../controllers/users/me.controller";
+import { savePushToken } from "../../controllers/users/push.controller";
 
 const router = Router();
 
@@ -101,6 +102,9 @@ router.delete(
   authGuard,
   clearLoginActivity
 );
+
+router.post("/users/push-token", authGuard, savePushToken);
+
 
 
 export default router;

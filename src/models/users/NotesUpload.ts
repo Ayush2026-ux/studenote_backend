@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import feedModels from "./feed.models";
 
 /* =========================================================
    ENUMS (DB-LEVEL STRICT)
@@ -24,7 +25,6 @@ export const COURSE_IDS = [
   "others",
 ] as const;
 
-
 export const SEMESTERS = [
   "Semester 1",
   "Semester 2",
@@ -45,7 +45,6 @@ export const FILE_TYPES = [
   "Project Report",
   "Others",
 ] as const;
-
 
 /* =========================================================
    INTERFACE
@@ -86,7 +85,6 @@ export interface INote extends Document {
 
 const NoteSchema = new Schema<INote>(
   {
-    /* BASIC INFO */
     title: {
       type: String,
       required: true,
@@ -121,14 +119,12 @@ const NoteSchema = new Schema<INote>(
       index: true,
     },
 
-    /* FILE INFO */
     fileType: {
       type: String,
       enum: FILE_TYPES,
       required: true,
     },
 
-    /* ❌ STRICTLY PAID NOTES */
     price: {
       type: Number,
       required: true,
@@ -156,7 +152,6 @@ const NoteSchema = new Schema<INote>(
       max: 500,
     },
 
-    /* USER */
     uploadedBy: {
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -164,7 +159,6 @@ const NoteSchema = new Schema<INote>(
       index: true,
     },
 
-    /* REVIEW */
     status: {
       type: String,
       enum: ["pending", "approved", "rejected"],
@@ -177,7 +171,6 @@ const NoteSchema = new Schema<INote>(
       maxlength: 300,
     },
 
-    /* METRICS */
     views: {
       type: Number,
       default: 0,
@@ -192,6 +185,40 @@ const NoteSchema = new Schema<INote>(
 );
 
 /* =========================================================
+   🔥 AUTO CREATE FEED WHEN NOTE IS APPROVED
+   (ADDED – nothing removed)
+========================================================= */
+
+NoteSchema.post("findOneAndUpdate", async function (doc) {
+  try {
+    if (!doc) return;
+
+    // Sirf approved hone par feed create hogi
+    if (doc.status !== "approved") return;
+
+    await feedModels.updateOne(
+      { note: doc._id },
+      {
+        $setOnInsert: {
+          note: doc._id,
+          author: doc.uploadedBy,
+          visibility: "public",
+          isActive: true,
+          likes: 0,
+          views: 0,
+          commentsCount: 0,
+          shareCount: 0,
+          score: 0,
+        },
+      },
+      { upsert: true }
+    );
+  } catch (error) {
+    console.error("AUTO_FEED_SYNC_ERROR:", error);
+  }
+});
+
+/* =========================================================
    INDEXES
 ========================================================= */
 
@@ -200,15 +227,3 @@ NoteSchema.index({ status: 1, createdAt: -1 });
 NoteSchema.index({ uploadedBy: 1, createdAt: -1 });
 
 export default mongoose.model<INote>("NoteUploads", NoteSchema);
-
-/* =========================================================
-   NOTES
-========================================================= */
-
-// 1. This model is specifically for notes that are uploaded by users.
-// 2. Only paid notes are allowed in this model (price >= 3).
-// 3. Free notes are not allowed here to maintain quality and value of notes.
-// 4. Each note goes through an approval process before being available for purchase.
-// 5. The model tracks views and downloads for analytics purposes.
-// 6. Uploaded notes can be reviewed and either approved or rejected by admins.
-// 7. Users can upload notes for various courses, subjects, and semesters.
