@@ -2,21 +2,16 @@ import { Request, Response, NextFunction } from "express";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import User from "../models/users/users.models";
 
-/* ================= TYPES ================= */
-
 export interface AuthRequest extends Request {
-  user?: any; // same behavior as your last working version
+  user?: any; // user document attached here
 }
 
-/* ================= AUTH GUARD ================= */
-
-export const authGuard = async (
+export const verifyAccessToken = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    /* ================= AUTH HEADER ================= */
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -26,46 +21,35 @@ export const authGuard = async (
       });
     }
 
-    const accessToken = authHeader.split(" ")[1];
+    const token = authHeader.split(" ")[1];
 
-    /* ================= VERIFY ACCESS TOKEN ================= */
     const decoded = jwt.verify(
-      accessToken,
+      token,
       process.env.JWT_ACCESS_SECRET!
     ) as JwtPayload & { _id?: string };
 
-    if (!decoded || !decoded._id) {
+    if (!decoded._id) {
       return res.status(401).json({
         success: false,
-        message: "Invalid access token payload",
+        message: "Invalid token",
       });
     }
 
-    /* ================= USER CHECK ================= */
     const user = await User.findById(decoded._id).select("-password");
 
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    if (!user.isActive) {
+    if (!user || !user.isActive) {
       return res.status(403).json({
         success: false,
-        message: "Account is disabled",
+        message: "User not allowed",
       });
     }
 
-    /* ================= ATTACH USER ================= */
-    req.user = user;
-
+    req.user = user; // ✅ ONLY THIS
     next();
-  } catch (error) {
+  } catch {
     return res.status(401).json({
       success: false,
-      message: "Invalid or expired access token",
+      message: "Invalid or expired token",
     });
   }
 };

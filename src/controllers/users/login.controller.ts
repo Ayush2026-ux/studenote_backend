@@ -68,6 +68,14 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
+    /* =================================================
+       🔥 UPDATE LAST LOGIN (THIS WAS MISSING)
+       This fixes "Last Login" date in Login & Security
+    ================================================= */
+
+    user.lastLoginAt = new Date();
+    user.lastLoginIp = req.ip;
+
     /* ================= GENERATE OTP ================= */
     const otp = String(generateOtp());
 

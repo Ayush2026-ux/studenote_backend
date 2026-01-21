@@ -7,7 +7,10 @@ export const getMeController = async (
   res: Response
 ) => {
   try {
-    const userId = (req.user as any)?.userId;
+    // ✅ SUPPORT BOTH CASES (future-proof)
+    const userId =
+      (req.user as any)?.userId ||
+      (req.user as any)?.id;
 
     if (!userId) {
       return res.status(401).json({
@@ -27,18 +30,10 @@ export const getMeController = async (
       });
     }
 
-    /* 🔥 IMPORTANT: DISABLE CACHE */
-    return res
-      .status(200)
-      .set({
-        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-        Pragma: "no-cache",
-        Expires: "0",
-      })
-      .json({
-        success: true,
-        user,
-      });
+    return res.status(200).json({
+      success: true,
+      user,
+    });
   } catch (error) {
     console.error("GET ME ERROR:", error);
     return res.status(500).json({

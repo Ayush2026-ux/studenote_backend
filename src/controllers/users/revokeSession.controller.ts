@@ -6,7 +6,7 @@ export const revokeSession = async (
   req: AuthRequest,
   res: Response
 ) => {
-  const userId = req.user._id; // ✅ FIXED
+  const userId = req.user!.userId; // 🔥 FIXED
   const { sessionId } = req.params;
 
   const session = await Session.findOne({

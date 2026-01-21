@@ -8,6 +8,8 @@ import {
   generateRefreshToken,
 } from "../../utils/jwt";
 import { sendLoginAlertEmail } from "../../utils/sendLoginAlertEmail";
+import { getLocationFromIp } from "../../utils/getLocationFromIp";
+import { getClientIp } from "../../utils/getClientIp"; // 🔥 ADD THIS
 
 export const verifyOtpController = async (
   req: Request,
@@ -68,7 +70,10 @@ export const verifyOtpController = async (
     user.otpAttempts = 0;
     user.isEmailVerified = true;
     user.lastLoginAt = new Date();
-    user.lastLoginIp = req.ip;
+
+    /* ================= REAL IP ================= */
+    const ipAddress = getClientIp(req); // 🔥 FIX
+    user.lastLoginIp = ipAddress;
 
     /* ================= TOKENS ================= */
     const accessToken = generateAccessToken({
@@ -81,15 +86,23 @@ export const verifyOtpController = async (
 
     await user.save();
 
+    /* ================= DEVICE & LOCATION ================= */
     const userAgent = req.headers["user-agent"] || "unknown";
-    const device = deviceName || userAgent || "Unknown device";
+    const device =
+      deviceName ||
+      userAgent ||
+      "Unknown device";
 
+    const location = await getLocationFromIp(ipAddress);
+
+    /* ================= SESSION CREATE ================= */
     await Session.create({
       userId: user._id,
-      token: refreshToken, // ✅ MUST BE REFRESH TOKEN
-      ipAddress: req.ip,
+      token: refreshToken,
+      ipAddress,
       device,
       userAgent,
+      location,
       lastActiveAt: new Date(),
       isRevoked: false,
     });
@@ -97,7 +110,7 @@ export const verifyOtpController = async (
     /* ================= LOGIN ACTIVITY ================= */
     await LoginActivity.create({
       userId: user._id,
-      ipAddress: req.ip,
+      ipAddress,
       device,
       userAgent,
     });
@@ -108,7 +121,7 @@ export const verifyOtpController = async (
         await sendLoginAlertEmail({
           to: user.email,
           device,
-          ip: req.ip || "Unknown",
+          ip: ipAddress,
           time: new Date(),
         });
       } catch (err) {
@@ -118,23 +131,25 @@ export const verifyOtpController = async (
 
     /* ================= RESPONSE ================= */
     return res.status(200).json({
-      success: true,
-      message: "OTP verified successfully",
-      accessToken,
-      refreshToken,
-      user: {
-        _id: user._id,
-        fullName: user.fullName,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-        avatar: user.avatar,
-        isEmailVerified: user.isEmailVerified,
-        isActive: user.isActive,
-        lastLoginAt: user.lastLoginAt,
-        lastLoginIp: user.lastLoginIp,
-      },
-    });
+  success: true,
+  message: "OTP verified successfully",
+  accessToken,
+  refreshToken,
+  user: {
+    _id: user._id,
+    fullName: user.fullName,
+    username: user.username,
+    email: user.email,
+    mobile: user.mobile, 
+    role: user.role,
+    avatar: user.avatar,
+    isEmailVerified: user.isEmailVerified,
+    isActive: user.isActive,
+    lastLoginAt: user.lastLoginAt,
+    lastLoginIp: user.lastLoginIp,
+  },
+});
+
   } catch (error: any) {
     console.error("VERIFY OTP ERROR:", error);
     return res.status(500).json({

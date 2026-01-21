@@ -8,10 +8,13 @@ const sessionSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    location: {
+      type: String, // e.g. "Delhi, India"
+    },
 
-    // 🔥 THIS IS REFRESH TOKEN
+
     token: {
-      type: String,
+      type: String, // 🔥 refresh token
       required: true,
       unique: true,
       index: true,
@@ -35,7 +38,7 @@ const sessionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-/* 🔥 Auto delete session after 30 days */
+// 🔥 Auto delete after 30 days
 sessionSchema.index(
   { createdAt: 1 },
   { expireAfterSeconds: 60 * 60 * 24 * 30 }

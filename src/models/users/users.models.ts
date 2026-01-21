@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
 
 const userSchema = new mongoose.Schema(
   {
@@ -35,17 +36,21 @@ const userSchema = new mongoose.Schema(
       match: /^[6-9]\d{9}$/,
     },
 
-    avatar: String,
+    avatar: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+    },
+
 
     /* ================= AUTH ================= */
 
     password: {
       type: String,
       minlength: 6,
-      required: function (this: any) {
+      select: false,
+      required: function (this: any): boolean {
         return this.provider === "local";
       },
-      select: false, // 🔐 NEVER expose password
     },
 
     provider: {
@@ -54,16 +59,16 @@ const userSchema = new mongoose.Schema(
       default: "local",
     },
 
+    /* ================= TOKENS ================= */
 
-      // ================= TOKENS ================= //
-      
     refreshToken: {
       type: String,
-      select: false, // hide by default
+      select: false,
     },
+
     refreshTokenExpiry: {
       type: Date,
-      select: false, // hide by default
+      select: false,
     },
 
     /* ================= OTP / SECURITY ================= */
@@ -89,6 +94,24 @@ const userSchema = new mongoose.Schema(
       select: false,
     },
 
+    /* ================= CHANGE PASSWORD OTP ================= */
+
+    changePasswordOtp: {
+      type: String,
+      select: false,
+    },
+
+    changePasswordOtpExpiry: {
+      type: Date,
+      select: false,
+    },
+
+    isChangePasswordOtpVerified: {
+      type: Boolean,
+      default: false,
+      select: false,
+    },
+
     /* ================= ACCOUNT STATUS ================= */
 
     isEmailVerified: {
@@ -111,16 +134,36 @@ const userSchema = new mongoose.Schema(
 
     loginAlertEnabled: {
       type: Boolean,
-      default: true, // 🔔 ON by default
+      default: true,
     },
 
     /* ================= SECURITY META ================= */
 
-    lastLoginAt: Date,
-    lastLoginIp: String,
+    lastLoginAt: {
+      type: Date,
+    },
+
+    lastLoginIp: {
+      type: String,
+    },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
+
+/* =====================================================
+   🔐 PASSWORD HASHING (NO TS ERROR)
+===================================================== */
+
+userSchema.pre("save", async function () {
+  const user = this as any;
+
+  if (!user.isModified("password")) return;
+  if (!user.password) return;
+
+  user.password = await bcrypt.hash(user.password, 10);
+});
 
 /* ================= INDEXES ================= */
 
