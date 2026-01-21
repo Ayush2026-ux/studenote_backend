@@ -61,11 +61,6 @@ const userSchema = new mongoose.Schema(
 
     /* ================= TOKENS ================= */
 
-<<<<<<< HEAD
-=======
-    // ================= TOKENS ================= //
-
->>>>>>> 9d460920aa6e04bf3e02186d825468c4ff30cf51
     refreshToken: {
       type: String,
       select: false,
