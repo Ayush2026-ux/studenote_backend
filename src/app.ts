@@ -7,13 +7,16 @@ import morgan from "morgan";
 
 import authRoutes from "./routes/users/auth.routes";
 import uploadRoutes from "./routes/users/upload.routes";
-import home from "./routes/users/home.routes";
-import userSearchRoutes from "./routes/chat/user.search.routes";
-
-// 🟢 CHAT ROUTES
-import chatRoutes from "../src/routes/chat/chat.routes";
-import requestRoutes from "../src/routes/chat/request.routes";
-
+import home from "./routes/users/home.route";
+import feedRoutes from "./routes/users/feed.routes";
+import commentRoutes from "./routes/users/comment.routes";
+import followRoutes from "./routes/users/follow.routes";
+import saveRoutes from "./routes/users/save.routes";
+import notificationRoutes from "./routes/users/notification.routes";
+import feedLikeRoutes from "./routes/users/feedLike.routes";
+import feedViewRoutes from "./routes/users/feedView.routes";
+import profileRoutes from "./routes/users/profile.routes";
+import sharesRoutes from "./routes/users/share.routes";
 const app = express();
 
 /* ================= MIDDLEWARES ================= */
@@ -58,22 +61,27 @@ app.use("/api", userSearchRoutes);
 
 /* ================= ROUTES ================= */
 
-// 🔓 PUBLIC AUTH ROUTES
+// PUBLIC ROUTES (NO TOKEN)
 app.use("/api", authRoutes);
 
-// 🔐 PROTECTED UPLOAD ROUTES
+//  PROTECTED ROUTES
 app.use("/api", uploadRoutes);
+app.use("/api/notes", home)
 
-// 📚 NOTES ROUTES
-app.use("/api/notes", home);
+// feed routes
+app.use("/api/feeds", feedRoutes);
+app.use("/api/comments", commentRoutes);
+app.use("/api/follow", followRoutes);
+app.use("/api/save", saveRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/feedlikes", feedLikeRoutes);
+app.use("/api/feedviews", feedViewRoutes);
+app.use("/api/shares", sharesRoutes);
 
-// 💬 CHAT ROUTES (INBOX + MESSAGES)
-app.use("/api", chatRoutes);
+// profile routes
 
-// 📩 MESSAGE REQUEST ROUTES (INSTAGRAM STYLE)
-app.use("/api", requestRoutes);
+app.use("/api/users/profile", profileRoutes);
 
-// API sanity check
 app.get("/api", (_req, res) => {
   res.json({ message: "API running 🚀" });
 });

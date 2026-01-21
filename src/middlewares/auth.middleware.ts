@@ -31,7 +31,7 @@ export const authGuard = async (
     /* ================= VERIFY ACCESS TOKEN ================= */
     const decoded = jwt.verify(
       accessToken,
-      process.env.JWT_ACCESS_SECRET!
+      process.env.JWT_SECRET!
     ) as JwtPayload & { _id?: string };
 
     if (!decoded || !decoded._id) {

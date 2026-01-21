@@ -33,6 +33,7 @@ import { clearLoginActivity } from "../../controllers/users/clearLoginActivity.c
 // ================= LOGIN ALERT / ME =================
 import { updateLoginAlert } from "../../controllers/users/updateLoginAlert.controller";
 import { getMeController } from "../../controllers/users/me.controller";
+import { savePushToken } from "../../controllers/users/push.controller";
 
 // ================= AVATAR CONTROLLERS =================
 import { uploadAvatarController } from "../../controllers/users/uploadAvatar.controller";
@@ -109,7 +110,13 @@ router.get("/user/login-activity", authGuard, getLoginActivity);
 router.post("/user/revoke-session/:sessionId", authGuard, revokeSession);
 router.delete("/user/login-activity", authGuard, clearLoginActivity);
 
+<<<<<<< HEAD
 /* ================= LOGIN ALERT ================= */
 router.patch("/user/login-alert", authGuard, updateLoginAlert);
+=======
+router.post("/users/push-token", authGuard, savePushToken);
+
+
+>>>>>>> 9d460920aa6e04bf3e02186d825468c4ff30cf51
 
 export default router;

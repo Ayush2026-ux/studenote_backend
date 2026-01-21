@@ -2,10 +2,10 @@ import mongoose from "mongoose";
 import { initGridFS } from "./gridfs"; // ✅ IMPORT REQUIRED
 
 const connectToMongo = async () => {
-  const uri = process.env.MONGO_URI;
+  const uri = process.env.MONGO_URI; // 🔥 FIXED NAME
 
   if (!uri) {
-    throw new Error("MONGO_URI is not defined in environment variables");
+    throw new Error("MONGODB_URL is not defined in environment variables");
   }
 
   try {

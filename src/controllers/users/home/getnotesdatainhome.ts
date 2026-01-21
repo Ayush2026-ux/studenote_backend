@@ -1,5 +1,3 @@
-
-
 // controllers/users/home/getnotesdata.controller.ts
 
 import { Request, Response } from "express";
@@ -11,16 +9,39 @@ import axios from "axios";
 //  NEW: Controller to fetch all approved notes for the Home Screen
 export const getAllNotes = async (req: Request, res: Response) => {
     try {
-        const { fileType, sort, page = "1", limit = "10" } = req.query;
+        const {
+            fileType,
+            sort,
+            search,
+            page = "1",
+            limit = "10",
+        } = req.query;
 
         const pageNum = Math.max(parseInt(page as string), 1);
-        const limitNum = Math.min(parseInt(limit as string), 20); // hard cap
+        const limitNum = Math.min(parseInt(limit as string), 20);
         const skip = (pageNum - 1) * limitNum;
 
+        /* ===============================
+           BASE QUERY
+        =============================== */
         const query: any = { status: "approved" };
 
         if (fileType) {
             query.fileType = fileType;
+        }
+
+        /* ===============================
+           SEARCH (TEXT + REGEX SAFE)
+        =============================== */
+        if (search) {
+            const searchRegex = new RegExp(search as string, "i");
+
+            query.$or = [
+                { title: searchRegex },
+                { description: searchRegex },
+                { subject: searchRegex },
+                { course: searchRegex },
+            ];
         }
 
         let notesQuery = NotesUpload.find(query)
@@ -30,9 +51,11 @@ export const getAllNotes = async (req: Request, res: Response) => {
             )
             .skip(skip)
             .limit(limitNum)
-            .lean(); // 🚀 performance boost
+            .lean();
 
-        // Sorting
+        /* ===============================
+           SORTING
+        =============================== */
         if (sort === "rating") {
             notesQuery = notesQuery.sort({ rating: -1 });
         } else {
@@ -45,7 +68,7 @@ export const getAllNotes = async (req: Request, res: Response) => {
         ]);
 
         const formattedNotes = notes.map((note: any) => ({
-            id: note._id.toString(), // ✅ FIX
+            id: note._id.toString(),
 
             title: note.title,
             description: note.description,
@@ -55,9 +78,8 @@ export const getAllNotes = async (req: Request, res: Response) => {
             semester: note.semester || "N/A",
 
             fileType: note.fileType,
-
             price: note.price,
-            isLocked: true, // paid-only model
+            isLocked: true,
 
             thumbnail: note.thumbnail,
             pages: note.pages ?? 1,
@@ -68,8 +90,6 @@ export const getAllNotes = async (req: Request, res: Response) => {
             rating: note.rating ?? 0,
             createdAt: note.createdAt,
         }));
-
-        // console.log(`FETCHED NOTES: `, formattedNotes);
 
         return res.status(200).json({
             success: true,
@@ -88,7 +108,6 @@ export const getAllNotes = async (req: Request, res: Response) => {
         });
     }
 };
-
 
 //  EXISTING: Your Preview logic
 export const getNotePreview = async (req: Request, res: Response) => {
@@ -201,3 +220,4 @@ export const getNotePreview = async (req: Request, res: Response) => {
         });
     }
 };
+
