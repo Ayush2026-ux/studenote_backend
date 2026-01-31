@@ -5,6 +5,7 @@ import morgan from "morgan";
 
 /* ================= ROUTES ================= */
 
+
 import authRoutes from "./routes/users/auth.routes";
 import uploadRoutes from "./routes/users/upload.routes";
 import home from "./routes/users/home.route";
@@ -17,6 +18,7 @@ import feedLikeRoutes from "./routes/users/feedLike.routes";
 import feedViewRoutes from "./routes/users/feedView.routes";
 import profileRoutes from "./routes/users/profile.routes";
 import sharesRoutes from "./routes/users/share.routes";
+import supportRoutes from "./routes/support/support.routes";
 // import userSearchRoutes from "./routes/users/userSearch.routes";
 const app = express();
 
@@ -49,13 +51,17 @@ app.get("/", (_req, res) => {
   });
 });
 
+
+app.use("/api/users/profile", profileRoutes);
+
+
 // ✅ HEALTH CHECK
 app.get("/health", (_req, res) => {
   res.status(200).send("OK");
 });
 
-
-
+// support routes
+app.use("/api/support", supportRoutes);
 
 // app.use("/api", userSearchRoutes);
 
@@ -81,7 +87,6 @@ app.use("/api/shares", sharesRoutes);
 
 // profile routes
 
-app.use("/api/users/profile", profileRoutes);
 
 app.get("/api", (_req, res) => {
   res.json({ message: "API running 🚀" });
