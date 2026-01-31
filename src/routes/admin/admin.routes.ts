@@ -1,9 +1,18 @@
 import { Router } from "express";
 import { adminAuth } from "../../middlewares/adminAuth.middleware";
-import { approveNote } from "../../controllers/admin/review.controller";
 
-const router = Router(); // ✅ VERY IMPORTANT
+import authRoutes from "./auth.routes";
+import usersRoutes from "./users/adminGetAllUsers";
 
-router.patch("/notes/:id/approve", adminAuth, approveNote);
+const router = Router(); //  VERY IMPORTANT
+
+/* ================= AUTH ROUTES ================= */
+router.use("/auth", authRoutes);
+
+/* ================= USERS ROUTES ================= */
+router.use("/users", usersRoutes);
+
+/* ================= PROTECTED ROUTES ================= */
+// router.patch("/notes/:id/approve", adminAuth, approveNote);
 
 export default router;

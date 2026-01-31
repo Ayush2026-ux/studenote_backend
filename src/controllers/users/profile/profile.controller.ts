@@ -1,18 +1,26 @@
+//controllers\users\profile\profile.controller.ts
 import { Request, Response } from "express";
 import mongoose from "mongoose";
 
-import User from "../../../models/users/users.models";
-import NotesUpload from "../../../models/users/NotesUpload";
-import feedModels from "../../../models/users/feed.models";
+import NoteUploads from "../../../models/users/NotesUpload";
+import Feed from "../../../models/users/feed.models";
+import FeedView from "../../../models/users/feedView.models";
 import followModule from "../../../models/users/follow.module";
-import feedViewModels from "../../../models/users/feedView.models";
 
 /* ======================================================
    GET PROFILE STATS
+   - Total Notes Uploaded
+   - Total Views (from FeedView, linked via Feed → Note)
+   - Followers / Following
 ====================================================== */
 
 export const getProfileStats = async (req: Request, res: Response) => {
     try {
+        //  Disable cache (fixes 304 + stale stats)
+        res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+        res.setHeader("Pragma", "no-cache");
+        res.setHeader("Expires", "0");
+
         const userId =
             (req as any).user?.id ||
             (req as any).user?._id;
@@ -28,72 +36,59 @@ export const getProfileStats = async (req: Request, res: Response) => {
 
         /* ================= FOLLOWERS / FOLLOWING ================= */
 
-        // 👥 Followers = jisne is user ko follow kiya
-        const followersCount = await followModule.countDocuments({
+        const followers = await followModule.countDocuments({
             following: userObjectId,
         });
 
-        // ➕ Following = user ne kitno ko follow kiya
-        const followingCount = await followModule.countDocuments({
+        const following = await followModule.countDocuments({
             follower: userObjectId,
         });
 
-        /* ================= NOTES UPLOADED ================= */
+        /* ================= USER NOTES ================= */
 
-        const notesCount = await NotesUpload.countDocuments({
-            uploadedBy: userObjectId,
-            isDeleted: false,
-        });
+        const userNotes = await NoteUploads.find(
+            {
+                uploadedBy: userObjectId,
+                isDeleted: { $ne: true }, // safe even if field doesn't exist
+            },
+            { _id: 1 }
+        ).lean();
 
-        /* ================= USER FEEDS ================= */
+        const noteIds = userNotes.map((n) => n._id);
+        const notes = noteIds.length;
 
-        const userFeeds = await feedModels
-            .find(
+        /* ================= FEEDS FOR THOSE NOTES ================= */
+
+        let views = 0;
+
+        if (noteIds.length > 0) {
+            const feeds = await Feed.find(
                 {
-                    author: userObjectId,
-                    isDeleted: false,
+                    note: { $in: noteIds },
+                    isActive: true,
                 },
                 { _id: 1 }
-            )
-            .lean();
+            ).lean();
 
-        const feedIds = userFeeds.map((f) => f._id);
+            const feedIds = feeds.map((f) => f._id);
 
-        /* ================= TOTAL VIEWS ================= */
+            /* ================= REAL VIEWS (FeedView) ================= */
 
-        const totalViews = await feedViewModels.countDocuments({
-            feed: { $in: feedIds },
-        });
-
-        /* ================= TOTAL LIKES ================= */
-
-        const likesAgg = await feedModels.aggregate([
-            {
-                $match: {
-                    author: userObjectId,
-                    isDeleted: false,
-                },
-            },
-            {
-                $group: {
-                    _id: null,
-                    totalLikes: { $sum: "$likes" },
-                },
-            },
-        ]);
-
-        const totalLikes = likesAgg[0]?.totalLikes || 0;
+            if (feedIds.length > 0) {
+                views = await FeedView.countDocuments({
+                    feed: { $in: feedIds },
+                });
+            }
+        }
 
         /* ================= RESPONSE ================= */
-
-        return res.json({
+        return res.status(200).json({
             success: true,
             data: {
-                followers: followersCount,
-                following: followingCount,
-                notes: notesCount,
-                views: totalViews,
-                likes: totalLikes,
+                followers,
+                following,
+                notes,
+                views,
             },
         });
     } catch (error) {

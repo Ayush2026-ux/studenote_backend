@@ -109,6 +109,10 @@ export const addComment = async (req: Request, res: Response) => {
    DELETE COMMENT (CASCADE SOFT DELETE)
 ====================================================== */
 
+/* ======================================================
+   DELETE COMMENT (COMMENT AUTHOR OR POST AUTHOR)
+====================================================== */
+
 export const deleteComment = async (req: Request, res: Response) => {
     const userId =
         (req as any).user?.id ||
@@ -127,18 +131,13 @@ export const deleteComment = async (req: Request, res: Response) => {
     session.startTransaction();
 
     try {
-        /* ---------- DELETE ROOT COMMENT ---------- */
-        const parent = await Comment.findOneAndUpdate(
-            {
-                _id: commentId,
-                author: userId,
-                isDeleted: false,
-            },
-            { $set: { isDeleted: true } },
-            { new: true, session }
-        );
+        /* ---------- FIND COMMENT ---------- */
+        const comment = await Comment.findOne({
+            _id: commentId,
+            isDeleted: false,
+        }).session(session);
 
-        if (!parent) {
+        if (!comment) {
             await session.abortTransaction();
             return res.status(404).json({
                 success: false,
@@ -146,12 +145,44 @@ export const deleteComment = async (req: Request, res: Response) => {
             });
         }
 
-        /* ---------- DELETE ALL REPLIES ---------- */
+        /* ---------- FIND FEED ---------- */
+        const feed = await Feed.findById(comment.feed)
+            .select("author")
+            .session(session);
+
+        if (!feed) {
+            await session.abortTransaction();
+            return res.status(404).json({
+                success: false,
+                message: "Feed not found",
+            });
+        }
+
+        /* ---------- AUTHORIZATION (ONLY POST OWNER) ---------- */
+        const isPostOwner =
+            feed.author.toString() === userId.toString();
+
+        if (!isPostOwner) {
+            await session.abortTransaction();
+            return res.status(403).json({
+                success: false,
+                message: "Only post owner can delete comments",
+            });
+        }
+
+        /* ---------- SOFT DELETE COMMENT ---------- */
+        await Comment.updateOne(
+            { _id: comment._id },
+            { $set: { isDeleted: true } },
+            { session }
+        );
+
+        /* ---------- SOFT DELETE ALL REPLIES ---------- */
         const repliesResult = await Comment.updateMany(
             {
                 $or: [
-                    { parentComment: parent._id },
-                    { rootComment: parent._id },
+                    { parentComment: comment._id },
+                    { rootComment: comment._id },
                 ],
                 isDeleted: false,
             },
@@ -159,12 +190,12 @@ export const deleteComment = async (req: Request, res: Response) => {
             { session }
         );
 
-        /* ---------- UPDATE COUNT ---------- */
+        /* ---------- UPDATE FEED COUNT ---------- */
         const totalDeleted =
             1 + (repliesResult.modifiedCount || 0);
 
         await Feed.updateOne(
-            { _id: parent.feed },
+            { _id: comment.feed },
             { $inc: { commentsCount: -totalDeleted } },
             { session }
         );
@@ -173,7 +204,7 @@ export const deleteComment = async (req: Request, res: Response) => {
 
         return res.json({
             success: true,
-            message: "Comment and all replies deleted",
+            message: "Comment deleted by post owner",
             deletedCount: totalDeleted,
         });
     } catch (error) {

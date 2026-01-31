@@ -11,13 +11,26 @@ if (!ACCESS_SECRET || !REFRESH_SECRET) {
 
 export interface AppJwtPayload extends DefaultJwtPayload {
   userId: string;
+  role?: "user" | "admin";
 }
+
+/* ================= USER TOKENS (40m / 365d) ================= */
 
 export const generateAccessToken = (payload: AppJwtPayload): string =>
   jwt.sign(payload, ACCESS_SECRET, { expiresIn: "40m" });
 
 export const generateRefreshToken = (payload: AppJwtPayload): string =>
   jwt.sign(payload, REFRESH_SECRET, { expiresIn: "365d" });
+
+/* ================= ADMIN TOKENS (12h / 7d) ================= */
+
+export const generateAdminAccessToken = (payload: AppJwtPayload): string =>
+  jwt.sign({ ...payload, role: "admin" }, ACCESS_SECRET, { expiresIn: "12h" });
+
+export const generateAdminRefreshToken = (payload: AppJwtPayload): string =>
+  jwt.sign({ ...payload, role: "admin" }, REFRESH_SECRET, { expiresIn: "7d" });
+
+/* ================= TOKEN VERIFICATION ================= */
 
 export const verifyAccessToken = (token: string): AppJwtPayload =>
   jwt.verify(token, ACCESS_SECRET) as AppJwtPayload;

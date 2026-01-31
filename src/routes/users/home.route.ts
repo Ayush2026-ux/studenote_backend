@@ -1,7 +1,7 @@
 // src/routes/home.routes.ts
 
 import express from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import {
     getAllNotes,
     getNotePreview,
@@ -25,11 +25,15 @@ const notesListLimiter = rateLimit({
 const previewLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 15,                 //  15 previews only
-    keyGenerator: (req) =>
-        (req as any).user?.id || req.ip,
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: (req, res) => {
+        const userId = (req as any).user?._id;
+        return userId ? `user:${userId}` : ipKeyGenerator(req as any);
+    },
 });
+
+
 
 /* ===============================
    ROUTES

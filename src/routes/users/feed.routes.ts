@@ -1,5 +1,5 @@
 import { Router } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 
 import {
     createFeed,
@@ -18,9 +18,12 @@ const router = Router();
 const viewLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 30,
-    keyGenerator: (req) => (req as any).user?.id || req.ip,
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: (req, res) => {
+        const userId = (req as any).user?._id;
+        return userId ? `user:${userId}` : ipKeyGenerator(req as any);
+    },
 });
 
 /* ================= FEED ROUTES ================= */
@@ -40,5 +43,7 @@ router.post(
 
 // Share feed
 router.post("/:feedId/share", authGuard, shareFeed);
+
+
 
 export default router;

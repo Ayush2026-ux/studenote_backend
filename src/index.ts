@@ -19,6 +19,10 @@ const startServer = async () => {
       console.log(` Server running on port ${PORT}`);
     });
 
+    // ✅ Set server timeouts for large file uploads
+    server.setTimeout(300000); // 5 minutes
+    server.keepAliveTimeout = 310000; // 5 minutes + 10 seconds
+
     //  Graceful shutdown
     const shutdown = () => {
       console.log(" Shutting down server...");

@@ -53,8 +53,8 @@ const fileFilter = (
 const upload = multer({
   storage,
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50 MB
-    files: 2,                  // thumbnail + pdf
+    fileSize: 150 * 1024 * 1024, // 150 MB
+    files: 2,                     // thumbnail + pdf
   },
   fileFilter,
 });

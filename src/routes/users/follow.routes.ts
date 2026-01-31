@@ -13,9 +13,13 @@ const router = Router();
 const followLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 20,
-    keyGenerator: (req) => (req as any).user?.id || req.ip,
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: (req, res) => {
+        return (req as any).user?._id
+            ? `user:${(req as any).user._id.toString()}`
+            : req.ip || req.socket.remoteAddress || "unknown";
+    },
 });
 
 router.post("/:userId", authGuard, followLimiter, followUser);

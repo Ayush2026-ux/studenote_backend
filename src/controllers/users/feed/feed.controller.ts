@@ -54,6 +54,7 @@ export const createFeed = async (req: Request, res: Response) => {
             commentsCount: 0,
             shareCount: 0,
             score: 0,
+
         });
 
         return res.status(201).json({ success: true, data: feed });
@@ -72,7 +73,7 @@ let hasMigrated = false;
 const syncApprovedNotesOnceInternal = async () => {
     if (hasMigrated) return;
 
-    console.log("🔁 Running one-time approved notes migration...");
+    console.log(" Running one-time approved notes migration...");
 
     const approvedNotes = await NotesUpload.find({ status: "approved" })
         .select("_id uploadedBy");
@@ -95,7 +96,7 @@ const syncApprovedNotesOnceInternal = async () => {
     }
 
     hasMigrated = true;
-    console.log("✅ Approved notes migration completed");
+    console.log(" Approved notes migration completed");
 };
 
 
@@ -108,13 +109,17 @@ export const getFeeds = async (req: Request, res: Response) => {
         const limit = Math.min(Number(req.query.limit) || 10, 10);
         const userId = (req as any)?.user?.id;
 
-        // ✅ SAFE seenIds
-        const seenIds = (req.query.seenIds as string | undefined)
+        //  SAFE seenIds
+        const seenIdsRaw = (req.query.seenIds as string | undefined)
             ?.split(",")
             .map(id => id.trim())
             .filter(id => mongoose.Types.ObjectId.isValid(id))
-            .slice(-50)
-            .map(id => new mongoose.Types.ObjectId(id));
+            .slice(-50);
+
+        // Deduplicate seenIds
+        const seenIds = Array.from(
+            new Set(seenIdsRaw?.map(id => id.toString()) || [])
+        ).map(id => new mongoose.Types.ObjectId(id));
 
         const query: any = {
             isActive: true,
@@ -125,28 +130,27 @@ export const getFeeds = async (req: Request, res: Response) => {
             query._id = { $nin: seenIds };
         }
 
-        // 1️⃣ Fetch feeds
+        // 1️ Fetch feeds
         const feeds = await Feed.find(query)
             .sort({ score: -1, createdAt: -1 })
             .limit(limit)
             .select(
-                "author note likes views commentsCount shareCount score createdAt"
+                "author note description likes views commentsCount shareCount score createdAt"
             )
             .populate("author", "fullName avatar")
-            // ✅ file field added here
-            .populate("note", "title thumbnail price file")
+            .populate("note", "title course description thumbnail price file")
             .lean();
-       // console.log("Feeds fetched:", feeds);
-        // 🟡 Not logged in
+        // console.log("Feeds fetched:", feeds);
+        //  Not logged in
         if (!userId || feeds.length === 0) {
             res.setHeader("Cache-Control", "no-store");
             return res.json({ success: true, data: feeds });
         }
 
-        // 2️⃣ Collect feed IDs
+        // 2️ Collect feed IDs
         const feedIds = feeds.map(f => f._id);
 
-        // 3️⃣ Fetch likes & saves
+        // 3️ Fetch likes & saves
         const likedFeeds = await FeedLike.find({
             user: userId,
             feed: { $in: feedIds },
@@ -166,17 +170,24 @@ export const getFeeds = async (req: Request, res: Response) => {
         const likedSet = new Set(likedFeeds.map(l => l.feed.toString()));
         const savedSet = new Set(savedFeeds.map(s => s.feed.toString()));
 
-        // 4️⃣ Merge status into feed
+        // 4️ Merge status into feed
         const finalFeeds = feeds.map(feed => ({
             ...feed,
             likedByMe: likedSet.has(feed._id.toString()),
             savedByMe: savedSet.has(feed._id.toString()),
         }));
+        console.log("Final feeds prepared:", finalFeeds);
 
-        // 🚫 Disable cache
+        //  Disable cache
         res.setHeader("Cache-Control", "no-store");
 
-        return res.json({ success: true, data: finalFeeds });
+
+
+        return res.json({
+            success: true,
+            data: finalFeeds,
+            seenIds: seenIds?.map(id => id.toString()) || [],
+        });
     } catch (error) {
         console.error("GET_FEEDS_ERROR:", error);
         return res.status(500).json({

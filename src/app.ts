@@ -15,8 +15,14 @@ import saveRoutes from "./routes/users/save.routes";
 import notificationRoutes from "./routes/users/notification.routes";
 import feedLikeRoutes from "./routes/users/feedLike.routes";
 import feedViewRoutes from "./routes/users/feedView.routes";
-import profileRoutes from "./routes/users/profile.routes";
 import sharesRoutes from "./routes/users/share.routes";
+import profileRoutes from "./routes/users/profile.routes";
+
+
+import adminRoutes from "./routes/admin/admin.routes";
+import AdminModerationRoutes from "./routes/admin/moderation.routes";
+import socialRoutes from "./routes/admin/social/social.route";
+
 // import userSearchRoutes from "./routes/users/userSearch.routes";
 const app = express();
 
@@ -24,11 +30,12 @@ const app = express();
 
 app.use(
   cors({
-    origin: "*",
+    origin: "http://localhost:3000", // exact frontend URL
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,               //  REQUIRED
   })
 );
+
 
 app.use(helmet());
 app.use(express.json({ limit: "50mb" }));
@@ -39,9 +46,20 @@ app.use(morgan("dev"));
 
 app.set("trust proxy", true);
 
+/* ================= REQUEST TIMEOUT MIDDLEWARE ================= */
+
+app.use((req, res, next) => {
+  // Set longer timeout for upload routes
+  if (req.path.includes("/upload")) {
+    req.setTimeout(1800000); // 30 minutes for large files
+    res.setTimeout(1800000); // 30 minutes for large files
+  }
+  next();
+});
+
 /* ================= ROOT + HEALTH ROUTES ================= */
 
-// ✅ ROOT ROUTE
+// ROOT ROUTE
 app.get("/", (_req, res) => {
   res.status(200).json({
     success: true,
@@ -49,7 +67,7 @@ app.get("/", (_req, res) => {
   });
 });
 
-// ✅ HEALTH CHECK
+//  HEALTH CHECK
 app.get("/health", (_req, res) => {
   res.status(200).send("OK");
 });
@@ -83,11 +101,18 @@ app.use("/api/shares", sharesRoutes);
 
 app.use("/api/users/profile", profileRoutes);
 
+
+
+// Admin API Test Route
+app.use("/api/admin", adminRoutes);
+app.use("/api/admin/moderation", AdminModerationRoutes);
+app.use("/api/admin/social", socialRoutes);
+
 app.get("/api", (_req, res) => {
-  res.json({ message: "API running 🚀" });
+  res.json({ message: "API running " });
 });
 
-/* ================= 404 HANDLER ================= */
+/* 404 HANDLER */
 
 app.use((_req, res) => {
   res.status(404).json({
@@ -96,7 +121,11 @@ app.use((_req, res) => {
   });
 });
 
-/* ================= GLOBAL ERROR HANDLER ================= */
+/* GLOBAL ERROR HANDLER */
+
+
+
+
 
 app.use(
   (

@@ -131,24 +131,24 @@ export const verifyOtpController = async (
 
     /* ================= RESPONSE ================= */
     return res.status(200).json({
-  success: true,
-  message: "OTP verified successfully",
-  accessToken,
-  refreshToken,
-  user: {
-    _id: user._id,
-    fullName: user.fullName,
-    username: user.username,
-    email: user.email,
-    mobile: user.mobile, 
-    role: user.role,
-    avatar: user.avatar,
-    isEmailVerified: user.isEmailVerified,
-    isActive: user.isActive,
-    lastLoginAt: user.lastLoginAt,
-    lastLoginIp: user.lastLoginIp,
-  },
-});
+      success: true,
+      message: "OTP verified successfully",
+      accessToken,
+      refreshToken,
+      user: {
+        _id: user._id,
+        fullName: user.fullName,
+        username: user.username,
+        email: user.email,
+        mobile: user.mobile,
+        role: user.role,
+        avatar: user.avatar,
+        isEmailVerified: user.isEmailVerified,
+        isActive: user.isActive,
+        lastLoginAt: user.lastLoginAt,
+        lastLoginIp: user.lastLoginIp,
+      },
+    });
 
   } catch (error: any) {
     console.error("VERIFY OTP ERROR:", error);

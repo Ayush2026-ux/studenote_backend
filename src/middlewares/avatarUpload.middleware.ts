@@ -4,7 +4,7 @@ import os from "os";
 
 /* ================= AVATAR UPLOAD ================= */
 
-// ✅ Android / Expo safe temp storage
+//  Android / Expo safe temp storage
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     cb(null, os.tmpdir());
@@ -15,7 +15,7 @@ const storage = multer.diskStorage({
   },
 });
 
-// ✅ Only images allowed
+//  Only images allowed
 const fileFilter: multer.Options["fileFilter"] = (
   _req,
   file,
