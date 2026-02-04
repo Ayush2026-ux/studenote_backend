@@ -146,8 +146,8 @@ export const getNotePreview = async (req: Request, res: Response) => {
         const pdfResponse = await axios.get(note.file, {
             responseType: "arraybuffer",
             timeout: 15000,
-            maxContentLength: Infinity, // 🔥 FIX
-            maxBodyLength: Infinity,    // 🔥 FIX
+            maxContentLength: Infinity, // FIX
+            maxBodyLength: Infinity,    // FIX
             validateStatus: (s) => s === 200,
         });
 

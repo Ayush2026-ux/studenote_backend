@@ -94,4 +94,4 @@ export const getSaveFeedData = async (req: Request, res: Response) => {
         });
     }
 };
-};
+

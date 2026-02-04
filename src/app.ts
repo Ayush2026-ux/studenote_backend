@@ -3,9 +3,10 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 
-/* ================= ROUTES ================= */
+import razorpayWebhookMiddleware from "./middlewares/razorpayWebhook.middleware";
+import { handleAllWebhooks } from "./controllers/payments/webhooks.controller";
 
-
+/* ROUTES */
 import authRoutes from "./routes/users/auth.routes";
 import uploadRoutes from "./routes/users/upload.routes";
 import home from "./routes/users/home.route";
@@ -19,49 +20,71 @@ import feedViewRoutes from "./routes/users/feedView.routes";
 import sharesRoutes from "./routes/users/share.routes";
 import profileRoutes from "./routes/users/profile.routes";
 
-
 import adminRoutes from "./routes/admin/admin.routes";
 import AdminModerationRoutes from "./routes/admin/moderation.routes";
 import socialRoutes from "./routes/admin/social/social.route";
-
+import paymentRoutes from "./routes/payments/payment.routes";
+import refundAdminRoutes from "./routes/admin/refund.routes";
 import supportRoutes from "./routes/support/support.routes";
-// import userSearchRoutes from "./routes/users/userSearch.routes";
+
 const app = express();
 
-/* ================= MIDDLEWARES ================= */
+/* ===============================
+   1️ RAZORPAY WEBHOOK (RAW BODY)
+   MUST COME FIRST
+================================ */
+
+app.post(
+  "/api/payments/webhook",
+  express.raw({ type: "application/json" }),
+  razorpayWebhookMiddleware,
+  handleAllWebhooks
+);
+
+/* ===============================
+   2 GLOBAL MIDDLEWARES
+================================ */
 
 app.use(
   cors({
-    origin: "http://localhost:3000", // exact frontend URL
+    origin: "http://localhost:3000",
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-    credentials: true,               //  REQUIRED
+    credentials: true,
   })
 );
 
-
 app.use(helmet());
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(morgan("dev"));
 
-/* ================= IMPORTANT (Cloudflare / Proxy) ================= */
+/* ===============================
+   3 BODY PARSERS (AFTER WEBHOOK)
+================================ */
+
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+/* ===============================
+   4 TRUST PROXY
+================================ */
 
 app.set("trust proxy", true);
 
-/* ================= REQUEST TIMEOUT MIDDLEWARE ================= */
+/* ===============================
+   5 TIMEOUT MIDDLEWARE
+================================ */
 
 app.use((req, res, next) => {
-  // Set longer timeout for upload routes
   if (req.path.includes("/upload")) {
-    req.setTimeout(1800000); // 30 minutes for large files
-    res.setTimeout(1800000); // 30 minutes for large files
+    req.setTimeout(1800000);
+    res.setTimeout(1800000);
   }
   next();
 });
 
-/* ================= ROOT + HEALTH ROUTES ================= */
+/* ===============================
+   6 HEALTH & ROOT
+================================ */
 
-// ROOT ROUTE
 app.get("/", (_req, res) => {
   res.status(200).json({
     success: true,
@@ -69,32 +92,23 @@ app.get("/", (_req, res) => {
   });
 });
 
-//  HEALTH CHECK
-
-app.use("/api/users/profile", profileRoutes);
-
-
-// ✅ HEALTH CHECK
 app.get("/health", (_req, res) => {
   res.status(200).send("OK");
 });
 
-// support routes
-app.use("/api/support", supportRoutes);
+/* ===============================
+   7️ROUTES
+================================ */
 
-// app.use("/api", userSearchRoutes);
-
-
-/* ================= ROUTES ================= */
-
-// PUBLIC ROUTES (NO TOKEN)
+// Public
 app.use("/api", authRoutes);
 
-//  PROTECTED ROUTES
+// Protected
 app.use("/api", uploadRoutes);
-app.use("/api/notes", home)
+app.use("/api/notes", home);
+app.use("/api/users/profile", profileRoutes);
 
-// feed routes
+// Feed
 app.use("/api/feeds", feedRoutes);
 app.use("/api/comments", commentRoutes);
 app.use("/api/follow", followRoutes);
@@ -104,21 +118,25 @@ app.use("/api/feedlikes", feedLikeRoutes);
 app.use("/api/feedviews", feedViewRoutes);
 app.use("/api/shares", sharesRoutes);
 
-// profile routes
-
-
-
-
-// Admin API Test Route
+// Admin
 app.use("/api/admin", adminRoutes);
 app.use("/api/admin/moderation", AdminModerationRoutes);
 app.use("/api/admin/social", socialRoutes);
+app.use("/api/admin/refunds", refundAdminRoutes);
+
+// Payments (NORMAL JSON ROUTES)
+app.use("/api/payments", paymentRoutes);
+
+// Support
+app.use("/api/support", supportRoutes);
 
 app.get("/api", (_req, res) => {
-  res.json({ message: "API running " });
+  res.json({ message: "API running" });
 });
 
-/* 404 HANDLER */
+/* ===============================
+   8️⃣ 404 HANDLER
+================================ */
 
 app.use((_req, res) => {
   res.status(404).json({
@@ -127,11 +145,9 @@ app.use((_req, res) => {
   });
 });
 
-/* GLOBAL ERROR HANDLER */
-
-
-
-
+/* ===============================
+   9️⃣ GLOBAL ERROR HANDLER
+================================ */
 
 app.use(
   (

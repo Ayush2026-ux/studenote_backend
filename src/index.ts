@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import path from "path";
 import app from "./app";
 import connectToMongo from "./config/mongodb";
+import { startRefundScheduler } from "./services/payments/refund.scheduler";
 
 dotenv.config({
   path: path.resolve(__dirname, "../.env"),
@@ -13,6 +14,9 @@ const startServer = async () => {
   try {
     //  Connect DB
     await connectToMongo();
+
+    // Start refund scheduler for auto-processing
+    startRefundScheduler();
 
     // Start server
     const server = app.listen(PORT, "0.0.0.0", () => {
