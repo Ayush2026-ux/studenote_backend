@@ -60,7 +60,7 @@ app.post(
 
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: "https://backend-studenote-production.up.railway.app",
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     credentials: true,
   })
