@@ -117,7 +117,7 @@ export const validateRefundEligibility = async (purchaseId: string): Promise<{
         }
 
         // 30-day refund window
-        const refundDeadline = new Date(purchase.createdAt);
+        const refundDeadline = new Date((purchase as any).createdAt || new Date());
         refundDeadline.setDate(refundDeadline.getDate() + 30);
 
         if (new Date() > refundDeadline) {

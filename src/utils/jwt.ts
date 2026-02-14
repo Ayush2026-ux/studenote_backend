@@ -14,10 +14,10 @@ export interface AppJwtPayload extends DefaultJwtPayload {
   role?: "user" | "admin";
 }
 
-/* ================= USER TOKENS (40m / 365d) ================= */
+/* ================= USER TOKENS (45m / 365d) ================= */
 
 export const generateAccessToken = (payload: AppJwtPayload): string =>
-  jwt.sign(payload, ACCESS_SECRET, { expiresIn: "40m" });
+  jwt.sign(payload, ACCESS_SECRET, { expiresIn: "45m" });
 
 export const generateRefreshToken = (payload: AppJwtPayload): string =>
   jwt.sign(payload, REFRESH_SECRET, { expiresIn: "365d" });

@@ -1,28 +1,14 @@
-import { Response } from "express";
 import bcrypt from "bcryptjs";
-import { AuthRequest } from "../../middlewares/auth.middleware";
+import { Response } from "express";
 import User from "../../models/users/users.models";
+import { AuthRequest } from "../../middlewares/auth.middleware";
 
-/**
- * CHANGE PASSWORD AFTER OTP VERIFICATION
- */
-export const changePasswordAfterOtp = async (
-  req: AuthRequest,
-  res: Response
-) => {
+export const changePasswordAfterOtp = async (req: AuthRequest, res: Response) => {
   try {
-    // ✅ FIX: use userId (not id)
-    const userId = req.user?.userId;
+    const userId = req.user?._id;   //correct source
     const { newPassword } = req.body;
 
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized",
-      });
-    }
-
-    if (!newPassword) {
+    if (!userId || !newPassword) {
       return res.status(400).json({
         success: false,
         message: "New password is required",
@@ -30,38 +16,43 @@ export const changePasswordAfterOtp = async (
     }
 
     const user = await User.findById(userId).select(
-      "+isChangePasswordOtpVerified +password"
+      "+changePasswordOtp +changePasswordOtpExpiry +isChangePasswordOtpVerified +password"
     );
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
     if (!user.isChangePasswordOtpVerified) {
-      return res.status(403).json({
+      return res.status(400).json({
         success: false,
-        message: "OTP verification required",
+        message: "OTP not verified",
       });
     }
 
-    // 🔐 HASH PASSWORD
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    user.password = hashedPassword;
+    // Optional: strong password check on backend
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 8 characters long",
+      });
+    }
 
-    // 🔁 Reset OTP verification flag
+    user.password = newPassword;  // pre-save hook will hash it
+
+    // Clear OTP state
+    user.changePasswordOtp = undefined;
+    user.changePasswordOtpExpiry = undefined;
     user.isChangePasswordOtpVerified = false;
 
     await user.save();
 
-    return res.status(200).json({
+    return res.json({
       success: true,
       message: "Password changed successfully",
     });
   } catch (error) {
-    console.error("CHANGE PASSWORD AFTER OTP ERROR:", error);
+    console.error("CHANGE PASSWORD ERROR:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to change password",

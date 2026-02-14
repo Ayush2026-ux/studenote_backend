@@ -1,102 +1,68 @@
 import { Request, Response } from "express";
-import {
-    getRefundProcessingStats,
-    getRefundsNearCompletion,
-    autoProcessRefunds,
-} from "../../../services/payments/refund.service";
-import {
-    triggerManualRefundProcessing,
-    getRefundSchedulerStatus,
-} from "../../../services/payments/refund.scheduler";
+import purchaseModel from "../../../models/payments/purchase.model";
 
 interface AdminRequest extends Request {
     user: { _id: string; role: string };
 }
 
-/**
- * Get refund processing statistics for admin dashboard
- */
-export const getRefundStats = async (req: AdminRequest, res: Response) => {
-    try {
-        const stats = await getRefundProcessingStats();
-        res.json(stats);
-    } catch (error: any) {
-        console.error("Get refund stats error:", error);
-        res.status(500).json({ message: error.message || "Failed to get refund statistics" });
+const ensureAdmin = (req: AdminRequest, res: Response) => {
+    if (req.user?.role !== "admin") {
+        res.status(403).json({ message: "Admin access required" });
+        return false;
     }
+    return true;
 };
 
 /**
- * Get refunds near completion for admin notifications
+ * List all refunds (for admin visibility only)
  */
-export const getNearCompletionRefunds = async (req: AdminRequest, res: Response) => {
+export const listRefunds = async (req: AdminRequest, res: Response) => {
+    if (!ensureAdmin(req, res)) return;
+
     try {
-        const refunds = await getRefundsNearCompletion();
-        res.json({
+        const refunds = await purchaseModel
+            .find({ refundStatus: { $exists: true } })
+            .sort({ refundRequestedAt: -1 })
+            .populate("user", "fullName email")
+            .populate("note", "title");
+
+        return res.json({
             count: refunds.length,
             refunds,
             timestamp: new Date(),
         });
     } catch (error: any) {
-        console.error("Get near completion refunds error:", error);
-        res.status(500).json({
-            message: error.message || "Failed to get near completion refunds",
-        });
+        console.error("listRefunds error:", error);
+        return res.status(500).json({ message: "Failed to fetch refunds" });
     }
 };
 
 /**
- * Manually trigger refund processing
- * Useful for testing or immediate processing needs
+ * Get refund stats (read-only)
  */
-export const manualRefundProcessing = async (req: AdminRequest, res: Response) => {
+export const getRefundStats = async (req: AdminRequest, res: Response) => {
+    if (!ensureAdmin(req, res)) return;
+
     try {
-        const result = await triggerManualRefundProcessing();
-        res.json({
-            message: "Manual refund processing triggered",
-            result,
+        const stats = await purchaseModel.aggregate([
+            {
+                $match: { refundStatus: { $exists: true } },
+            },
+            {
+                $group: {
+                    _id: "$refundStatus",
+                    count: { $sum: 1 },
+                    totalAmount: { $sum: "$refundAmount" },
+                },
+            },
+        ]);
+
+        return res.json({
+            stats,
+            timestamp: new Date(),
         });
     } catch (error: any) {
-        console.error("Manual refund processing error:", error);
-        res.status(500).json({
-            message: error.message || "Failed to process refunds",
-        });
-    }
-};
-
-/**
- * Get scheduler status
- */
-export const getSchedulerStatus = async (req: AdminRequest, res: Response) => {
-    try {
-        const status = getRefundSchedulerStatus();
-        res.json(status);
-    } catch (error: any) {
-        console.error("Get scheduler status error:", error);
-        res.status(500).json({ message: error.message || "Failed to get scheduler status" });
-    }
-};
-
-/**
- * Immediate refund processing endpoint
- * For emergency/urgent refunds
- */
-export const forceRefundProcessing = async (req: AdminRequest, res: Response) => {
-    try {
-        const { purchaseId } = req.body;
-
-        if (!purchaseId) {
-            return res.status(400).json({ message: "purchaseId is required" });
-        }
-
-        const result = await autoProcessRefunds();
-
-        res.json({
-            message: "Force refund processing completed",
-            result,
-        });
-    } catch (error: any) {
-        console.error("Force refund processing error:", error);
-        res.status(500).json({ message: error.message || "Failed to force refund processing" });
+        console.error("getRefundStats error:", error);
+        return res.status(500).json({ message: "Failed to fetch refund stats" });
     }
 };

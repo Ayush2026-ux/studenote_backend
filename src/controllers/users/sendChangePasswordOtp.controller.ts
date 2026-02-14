@@ -4,48 +4,28 @@ import { AuthRequest } from "../../middlewares/auth.middleware";
 import User from "../../models/users/users.models";
 import { sendChangePasswordOtpMail } from "../../services/mail/otp.mail";
 
-/**
- * SEND OTP FOR PROFILE PASSWORD CHANGE
- */
-export const sendChangePasswordOtp = async (
-  req: AuthRequest,
-  res: Response
-) => {
+export const sendChangePasswordOtp = async (req: AuthRequest, res: Response) => {
   try {
-    // ✅ FIX: use userId (not id)
-    const userId = req.user?.userId;
+    const userId = req.user?._id;   // ✅ FIX HERE
 
     if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized",
-      });
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    // 🔐 Generate OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpHash = crypto
-      .createHash("sha256")
-      .update(otp)
-      .digest("hex");
+    const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
 
-    // ⏱ Save OTP
     user.changePasswordOtp = otpHash;
     user.changePasswordOtpExpiry = new Date(Date.now() + 10 * 60 * 1000);
     user.isChangePasswordOtpVerified = false;
 
     await user.save();
-
-    // 📧 Send OTP email
-    await sendChangePasswordOtpMail(user.email, otp);
+    await sendChangePasswordOtpMail(user.email.toLowerCase(), otp);
 
     return res.status(200).json({
       success: true,

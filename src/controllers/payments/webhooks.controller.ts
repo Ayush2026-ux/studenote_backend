@@ -3,157 +3,131 @@ import NotesUpload from "../../models/users/NotesUpload";
 import purchaseModel from "../../models/payments/purchase.model";
 import feedModels from "../../models/users/feed.models";
 import { calculateAmount } from "../../services/payments/razorpay.service";
+import { creditCreatorWallet, releaseEarningImmediately, reverseEarningOnRefund } from "../../services/payments/wallet.service";
 
 /**
- * ===============================
- * Razorpay Webhook Handler
- * ===============================
- * Source of truth for payment success
+ * payment.captured
  */
-
-/**
- * PAYMENT CAPTURED
- *  CREATE PURCHASE HERE ONLY
- */
-export const handlePaymentCaptured = async (
-    req: Request,
-    res: Response
-) => {
+export const handlePaymentCaptured = async (req: Request, res: Response) => {
     try {
-        const payment = req.body.payload.payment.entity;
+        const payment = req.body?.payload?.payment?.entity;
+        if (!payment) return res.json({ received: true });
 
-        const {
-            order_id: razorpayOrderId,
-            id: razorpayPaymentId,
-            notes,
-        } = payment;
+        const razorpayOrderId = payment.order_id;
+        const razorpayPaymentId = payment.id;
+        const paidAmount = (payment.amount || 0) / 100;
 
-        console.log("💳 Payment Details:", {
-            razorpayOrderId,
-            razorpayPaymentId,
-            notes,
-        });
+        const { noteId, userId } = payment.notes || {};
 
-        const { noteId, userId, platformFee } = notes;
-
-        if (!noteId || !userId) {
-            console.warn("⚠️  Missing noteId or userId in payment notes");
+        if (!noteId || !userId || !razorpayOrderId) {
+            console.warn(" Missing metadata in webhook");
             return res.json({ received: true });
         }
 
-        // Idempotency check (webhook retries)
-        const existing = await purchaseModel.findOne({
-            razorpayPaymentId,
-        });
+        const purchase = await purchaseModel.findOne({ razorpayOrderId });
+        if (!purchase) return res.json({ received: true });
 
-        if (existing) {
-            console.log("ℹ️  Purchase already exists (idempotency check):", razorpayPaymentId);
+        // Idempotency
+        if (purchase.status === "paid") {
             return res.json({ received: true });
         }
 
         const note = await NotesUpload.findById(noteId);
-        if (!note) {
-            console.warn("⚠️  Note not found:", noteId);
+        if (!note) return res.json({ received: true });
+
+        const { platformFee, totalAmount } = calculateAmount(note.price);
+
+        // Allow small rounding diff (₹1 tolerance)
+        if (Math.abs(paidAmount - totalAmount) > 1) {
+            console.error(" Amount mismatch:", { paidAmount, totalAmount });
             return res.json({ received: true });
         }
 
-        const { totalAmount } = calculateAmount(note.price);
+        purchase.razorpayPaymentId = razorpayPaymentId;
+        purchase.platformFee = platformFee;
+        purchase.totalAmount = totalAmount;
+        purchase.status = "paid";
+        await purchase.save();
 
-        try {
-            // ✅ CREATE PURCHASE
-            const newPurchase = await purchaseModel.create({
-                user: userId,
-                note: noteId,
+        await NotesUpload.updateOne({ _id: noteId }, { $inc: { downloads: 1 } });
+        await feedModels.updateOne({ note: noteId }, { $inc: { score: 10 } });
 
-                razorpayOrderId,
-                razorpayPaymentId,
+        // Credit creator earnings (idempotent)
+        await creditCreatorWallet(purchase._id.toString());
 
-                amount: note.price,
-                platformFee,
-                totalAmount,
+        // If you want instant wallet credit (no T+7 wait)
+        await releaseEarningImmediately(purchase._id.toString());
 
-                status: "paid",
-            });
-
-            console.log("✅ Purchase created:", newPurchase._id);
-
-            // Side effects
-            await NotesUpload.updateOne(
-                { _id: noteId },
-                { $inc: { downloads: 1 } }
-            );
-
-            await feedModels.updateOne(
-                { note: noteId },
-                { $inc: { score: 10 } }
-            );
-
-            console.log("✨ Payment captured & purchase created:", razorpayPaymentId);
-        } catch (dbError: any) {
-            // Handle duplicate key error (user already bought this note)
-            if (dbError.code === 11000) {
-                console.warn("⚠️  Duplicate purchase attempt - User already owns this note");
-                console.warn("   Payment:", razorpayPaymentId);
-                console.warn("   User:", userId, "Note:", noteId);
-                // Still return success so Razorpay doesn't retry
-                return res.json({ received: true });
-            }
-            // Re-throw other errors
-            throw dbError;
-        }
-
-        res.json({ received: true });
+        return res.json({ received: true });
     } catch (error) {
-        console.error("❌ payment.captured webhook error:", error);
-        res.json({ received: true }); // Razorpay retries if not 200
+        console.error("payment.captured webhook error:", error);
+        return res.json({ received: true });
     }
 };
 
 /**
- * ===============================
- * REFUND WEBHOOKS
- * ===============================
+ * refund.created
  */
-
 export const handleRefundCreated = async (req: Request, res: Response) => {
     try {
-        const refund = req.body.payload.refund.entity;
+        const refund = req.body?.payload?.refund?.entity;
+        if (!refund) return res.json({ received: true });
 
         const purchase = await purchaseModel.findOne({
             razorpayPaymentId: refund.payment_id,
         });
 
-        if (purchase) {
-            purchase.razorpayRefundId = refund.id;
-            purchase.refundStatus = "processing";
-            purchase.refundAmount = refund.amount / 100; // paise → rupees
-            purchase.refundRequestedAt = new Date();
-            await purchase.save();
+        if (!purchase) return res.json({ received: true });
+
+        // Idempotency
+        if (purchase.razorpayRefundId === refund.id) {
+            return res.json({ received: true });
         }
 
-        res.json({ received: true });
+        purchase.razorpayRefundId = refund.id;
+        purchase.refundStatus = "processing";
+        purchase.refundAmount = (refund.amount || 0) / 100;
+        purchase.refundRequestedAt = refund.created_at
+            ? new Date(refund.created_at * 1000)
+            : new Date();
+
+        await purchase.save();
+
+        return res.json({ received: true });
     } catch (error) {
         console.error("refund.created error:", error);
-        res.json({ received: true });
+        return res.json({ received: true });
     }
 };
 
+/**
+ * refund.processed
+ */
 export const handleRefundProcessed = async (req: Request, res: Response) => {
     try {
-        const refund = req.body.payload.refund.entity;
+        const refund = req.body?.payload?.refund?.entity;
+        if (!refund) return res.json({ received: true });
 
         const purchase = await purchaseModel.findOne({
             razorpayRefundId: refund.id,
         });
 
-        if (!purchase) {
+        if (!purchase) return res.json({ received: true });
+
+        // Idempotency
+        if (purchase.refundStatus === "completed") {
             return res.json({ received: true });
         }
 
-        purchase.refundStatus = "completed";
-        purchase.refundCompletedAt = new Date();
+        const refundedAmount = (refund.amount || 0) / 100;
 
-        if (purchase.refundAmount === purchase.totalAmount) {
+        purchase.refundStatus = "completed";
+        purchase.refundCompletedAt = refund.created_at
+            ? new Date(refund.created_at * 1000)
+            : new Date();
+        purchase.refundAmount = refundedAmount;
+
+        if (refundedAmount >= purchase.totalAmount) {
             purchase.status = "refunded";
 
             await NotesUpload.updateOne(
@@ -170,30 +144,34 @@ export const handleRefundProcessed = async (req: Request, res: Response) => {
         }
 
         await purchase.save();
-        res.json({ received: true });
+
+        // Reverse creator earnings (PASS refunded amount for partial refunds)
+        await reverseEarningOnRefund(purchase._id.toString());
+
+        return res.json({ received: true });
     } catch (error) {
         console.error("refund.processed error:", error);
-        res.json({ received: true });
+        return res.json({ received: true });
     }
 };
 
+/**
+ * refund.failed
+ */
 export const handleRefundFailed = async (req: Request, res: Response) => {
     try {
-        const refund = req.body.payload.refund.entity;
+        const refund = req.body?.payload?.refund?.entity;
+        if (!refund) return res.json({ received: true });
 
-        const purchase = await purchaseModel.findOne({
-            razorpayRefundId: refund.id,
-        });
+        await purchaseModel.updateOne(
+            { razorpayRefundId: refund.id },
+            { refundStatus: "failed" }
+        );
 
-        if (purchase) {
-            purchase.refundStatus = "failed";
-            await purchase.save();
-        }
-
-        res.json({ received: true });
+        return res.json({ received: true });
     } catch (error) {
         console.error("refund.failed error:", error);
-        res.json({ received: true });
+        return res.json({ received: true });
     }
 };
 
@@ -203,30 +181,22 @@ export const handleRefundFailed = async (req: Request, res: Response) => {
  * ===============================
  */
 export const handleAllWebhooks = async (req: Request, res: Response) => {
-    const event = req.body.event;
-
-    console.log("🔔 Webhook Event Received:", event);
-    console.log("📦 Full Payload:", JSON.stringify(req.body, null, 2));
+    const event = req.body?.event;
 
     switch (event) {
         case "payment.captured":
-            console.log("💰 Processing payment.captured");
             return handlePaymentCaptured(req, res);
 
         case "refund.created":
-            console.log("↩️  Processing refund.created");
             return handleRefundCreated(req, res);
 
         case "refund.processed":
-            console.log("✅ Processing refund.processed");
             return handleRefundProcessed(req, res);
 
         case "refund.failed":
-            console.log("❌ Processing refund.failed");
             return handleRefundFailed(req, res);
 
         default:
-            console.warn("⚠️  Unknown webhook event:", event);
             return res.json({ received: true });
     }
 };

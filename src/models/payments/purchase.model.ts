@@ -6,7 +6,6 @@ export interface IPurchase extends Document {
 
     razorpayOrderId: string;
     razorpayPaymentId?: string;
-    razorpaySignature?: string;
 
     amount: number;
     platformFee: number;
@@ -14,15 +13,12 @@ export interface IPurchase extends Document {
 
     status: "created" | "paid" | "failed" | "refunded" | "partially_refunded";
 
-    refundStatus?: "pending" | "processing" | "completed" | "failed";
+    refundStatus?: "processing" | "completed" | "failed";
     razorpayRefundId?: string;
     refundAmount?: number;
     refundReason?: string;
     refundRequestedAt?: Date;
     refundCompletedAt?: Date;
-
-    createdAt: Date;
-    updatedAt: Date;
 }
 
 const PurchaseSchema = new Schema<IPurchase>(
@@ -30,9 +26,8 @@ const PurchaseSchema = new Schema<IPurchase>(
         user: { type: Schema.Types.ObjectId, ref: "User", required: true },
         note: { type: Schema.Types.ObjectId, ref: "NoteUploads", required: true },
 
-        razorpayOrderId: { type: String, required: true, unique: true },
-        razorpayPaymentId: String,
-        razorpaySignature: String,
+        razorpayOrderId: { type: String, required: true, unique: true, index: true },
+        razorpayPaymentId: { type: String, index: true },
 
         amount: { type: Number, required: true },
         platformFee: { type: Number, required: true },
@@ -42,14 +37,16 @@ const PurchaseSchema = new Schema<IPurchase>(
             type: String,
             enum: ["created", "paid", "failed", "refunded", "partially_refunded"],
             default: "created",
+            index: true,
         },
 
-        refundStatus: {
+        refundStatus: { 
             type: String,
-            enum: ["pending", "processing", "completed", "failed"],
-            default: undefined,
+            enum: ["processing", "completed", "failed"],
+            index: true,
         },
-        razorpayRefundId: String,
+
+        razorpayRefundId: { type: String, index: true },
         refundAmount: Number,
         refundReason: String,
         refundRequestedAt: Date,
@@ -58,11 +55,20 @@ const PurchaseSchema = new Schema<IPurchase>(
     { timestamps: true }
 );
 
-PurchaseSchema.index({ user: 1, note: 1 }, { unique: true });
-PurchaseSchema.index({ razorpayOrderId: 1 });
-PurchaseSchema.index({ razorpayPaymentId: 1 });
-PurchaseSchema.index({ razorpayRefundId: 1 });
-PurchaseSchema.index({ refundStatus: 1, refundRequestedAt: 1 });
-PurchaseSchema.index({ status: 1, refundStatus: 1 });
+/**
+ * Unique active purchase per user per note
+ * Blocks: created, paid, partially_refunded
+ * Allows: refunded, failed
+ */
+
+PurchaseSchema.index(
+    { user: 1, note: 1 },
+    {
+        unique: true,
+        partialFilterExpression: {
+            status: { $in: ["created", "paid", "partially_refunded"] },
+        },
+    }
+);
 
 export default mongoose.model<IPurchase>("Purchase", PurchaseSchema);

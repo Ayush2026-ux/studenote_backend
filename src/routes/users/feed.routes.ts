@@ -4,9 +4,10 @@ import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import {
     createFeed,
     toggleLikeFeed,
-    registerFeedView,
-    shareFeed,
     getFeeds,
+    registerFeedViews,
+    shareFeed,
+    getFeedsMetadataBatch,
 } from "../../controllers/users/feed/feed.controller";
 
 import { authGuard } from "../../middlewares/auth.middleware";
@@ -30,6 +31,8 @@ const viewLimiter = rateLimit({
 router.get("/", getFeeds);
 // Create feed
 router.post("/", authGuard, createFeed);
+router.post("/metadata-batch", authGuard, getFeedsMetadataBatch);
+
 
 // Like / Unlike
 router.post("/:feedId/like", authGuard, toggleLikeFeed);
@@ -38,7 +41,7 @@ router.post("/:feedId/like", authGuard, toggleLikeFeed);
 router.post(
     "/:feedId/view",
     viewLimiter,
-    registerFeedView
+    registerFeedViews
 );
 
 // Share feed

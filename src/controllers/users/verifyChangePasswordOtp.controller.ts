@@ -1,62 +1,47 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import crypto from "crypto";
 import User from "../../models/users/users.models";
+import { AuthRequest } from "../../middlewares/auth.middleware";
 
-export const verifyChangePasswordOtp = async (
-  req: Request,
-  res: Response
-) => {
+export const verifyChangePasswordOtp = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as Request & { user?: { id: string } }).user?.id;
+    const userId = req.user?._id;   // ✅ FIX HERE
     const { otp } = req.body;
 
-    if (!userId) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    if (!otp) {
-      return res.status(400).json({ message: "OTP is required" });
+    if (!userId || !otp) {
+      return res.status(400).json({ success: false, message: "OTP required" });
     }
 
     const user = await User.findById(userId).select(
-      "+changePasswordOtp +changePasswordOtpExpiry"
+      "+changePasswordOtp +changePasswordOtpExpiry +isChangePasswordOtpVerified"
     );
 
-    if (!user || !user.changePasswordOtp) {
-      return res.status(400).json({ message: "OTP not found" });
+    if (!user || !user.changePasswordOtp || !user.changePasswordOtpExpiry) {
+      return res.status(400).json({ success: false, message: "OTP expired" });
     }
 
-    const otpHash = crypto
+    if (user.changePasswordOtpExpiry.getTime() < Date.now()) {
+      user.changePasswordOtp = undefined;
+      user.changePasswordOtpExpiry = undefined;
+      await user.save();
+      return res.status(400).json({ success: false, message: "OTP expired" });
+    }
+
+    const incomingHash = crypto
       .createHash("sha256")
-      .update(String(otp))
+      .update(String(otp).trim())
       .digest("hex");
 
-    if (otpHash !== user.changePasswordOtp) {
-      return res.status(400).json({ message: "Invalid OTP" });
-    }
-
-    if (
-      !user.changePasswordOtpExpiry ||
-      user.changePasswordOtpExpiry.getTime() < Date.now()
-    ) {
-      return res.status(400).json({ message: "OTP expired" });
+    if (incomingHash !== user.changePasswordOtp) {
+      return res.status(400).json({ success: false, message: "Invalid OTP" });
     }
 
     user.isChangePasswordOtpVerified = true;
-    user.changePasswordOtp = undefined;
-    user.changePasswordOtpExpiry = undefined;
-
     await user.save();
 
-    return res.status(200).json({
-      success: true,
-      message: "OTP verified successfully",
-    });
-  } catch (error) {
-    console.error("VERIFY CHANGE PASSWORD OTP ERROR:", error);
-    return res.status(500).json({
-      success: false,
-      message: "OTP verification failed",
-    });
+    return res.json({ success: true, message: "OTP verified" });
+  } catch (err) {
+    console.error("VERIFY CHANGE PASSWORD OTP ERROR:", err);
+    return res.status(500).json({ success: false, message: "OTP verification failed" });
   }
 };

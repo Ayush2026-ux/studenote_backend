@@ -20,14 +20,26 @@ const SupportMessageSchema = new Schema<ISupportMessage>(
       type: String,
       enum: ["user", "support"],
       required: true,
+      index: true,
     },
-    text: String,
-    imageUrl: String,
+    text: {
+      type: String,
+      trim: true,
+      maxlength: 5000,
+    },
+    imageUrl: {
+      type: String,
+    },
   },
-  { timestamps: { createdAt: true, updatedAt: false } }
+  {
+    timestamps: { createdAt: true, updatedAt: false },
+  }
 );
 
-export const SupportMessage = model(
+//  Composite index for fast message loading
+SupportMessageSchema.index({ conversationId: 1, createdAt: 1 });
+
+export const SupportMessage = model<ISupportMessage>(
   "SupportMessage",
   SupportMessageSchema
 );

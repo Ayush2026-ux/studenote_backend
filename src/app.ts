@@ -22,11 +22,17 @@ import profileRoutes from "./routes/users/profile.routes";
 
 import adminRoutes from "./routes/admin/admin.routes";
 import AdminModerationRoutes from "./routes/admin/moderation.routes";
+import financeRoutes from "./routes/admin/earnings/finance.routes";
 import socialRoutes from "./routes/admin/social/social.route";
 import paymentRoutes from "./routes/payments/payment.routes";
-import refundAdminRoutes from "./routes/admin/refund.routes";
+import supportAdminRoutes from "./routes/admin/support/support.routes";
+import dashboardRoutes from "./routes/admin/dashboard/dashboard.route";
+//import refundAdminRoutes from "./routes/admin/refund.routes";
 import supportRoutes from "./routes/support/support.routes";
-
+import { handlePayoutWebhook } from "./controllers/payments/payout.webhook";
+import walletRoutes from "./routes/payments/wallet.routes";
+import earningsRoutes from "./routes/admin/payments/admin.earnings.routes";
+import payotesRoutes from "./routes/admin/payments/admin.payout.routes";
 const app = express();
 
 /* ===============================
@@ -38,7 +44,14 @@ app.post(
   "/api/payments/webhook",
   express.raw({ type: "application/json" }),
   razorpayWebhookMiddleware,
-  handleAllWebhooks
+  handleAllWebhooks,
+);
+
+app.post(
+  "/api/payouts/webhook",
+  express.raw({ type: "application/json" }),
+  razorpayWebhookMiddleware,
+  handlePayoutWebhook
 );
 
 /* ===============================
@@ -97,7 +110,7 @@ app.get("/health", (_req, res) => {
 });
 
 /* ===============================
-   7️ROUTES
+   7 ROUTES
 ================================ */
 
 // Public
@@ -122,10 +135,19 @@ app.use("/api/shares", sharesRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/admin/moderation", AdminModerationRoutes);
 app.use("/api/admin/social", socialRoutes);
-app.use("/api/admin/refunds", refundAdminRoutes);
+app.use("/api/admin/finance", financeRoutes);
+app.use("/api/admin/support", supportAdminRoutes);
+app.use("/api/admin/analytics", dashboardRoutes);
+
+
+
+//app.use("/api/admin/refunds", refundAdminRoutes);
 
 // Payments (NORMAL JSON ROUTES)
 app.use("/api/payments", paymentRoutes);
+app.use("/api/wallet", walletRoutes); // For wallet-related routes
+app.use("/api/payouts", payotesRoutes); // For admin payment routes
+app.use("/api/earnings", earningsRoutes);
 
 // Support
 app.use("/api/support", supportRoutes);
@@ -135,7 +157,7 @@ app.get("/api", (_req, res) => {
 });
 
 /* ===============================
-   8️⃣ 404 HANDLER
+   8 404 HANDLER
 ================================ */
 
 app.use((_req, res) => {
@@ -146,7 +168,7 @@ app.use((_req, res) => {
 });
 
 /* ===============================
-   9️⃣ GLOBAL ERROR HANDLER
+   9 GLOBAL ERROR HANDLER
 ================================ */
 
 app.use(

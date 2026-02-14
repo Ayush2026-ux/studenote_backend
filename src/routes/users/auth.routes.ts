@@ -21,7 +21,7 @@ import { authGuard } from "../../middlewares/auth.middleware";
 import { sendChangePasswordOtp } from "../../controllers/users/sendChangePasswordOtp.controller";
 import { verifyChangePasswordOtp } from "../../controllers/users/verifyChangePasswordOtp.controller";
 import { changePasswordAfterOtp } from "../../controllers/users/changePasswordAfterOtp.controller";
-import { changePasswordController } from "../../controllers/users/changePassword.controller";
+import {  resetPasswordController } from "../../controllers/users/changePassword.controller";
 import { updateProfile } from "../../controllers/users/updateProfile.controller";
 
 // ================= SESSIONS =================
@@ -53,7 +53,8 @@ router.post("/logout", authGuard, logout);
 /* ================= FORGOT / LOGIN PASSWORD ================= */
 router.post("/forgot-password", forgotPassword);
 router.post("/verify-forgot-otp", verifyForgotOtp);
-router.post("/reset-password", changePasswordController); // LOGIN FLOW
+//router.post("/reset-password", changePasswordController); // LOGIN FLOW
+router.post("/reset-password", resetPasswordController); // PUBLIC (no auth)
 
 /* ================= PROFILE ================= */
 router.get("/me", authGuard, getMeController);

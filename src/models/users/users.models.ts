@@ -137,12 +137,17 @@ const userSchema = new mongoose.Schema(
       default: true,
     },
 
-    /* 🔔 EXPO PUSH TOKEN */
+    /*  EXPO PUSH TOKEN */
     expoPushToken: {
       type: String,
       index: true,
       default: null,
     },
+
+
+
+
+
 
     /* ================= SECURITY META ================= */
 
@@ -160,7 +165,7 @@ const userSchema = new mongoose.Schema(
 );
 
 /* =====================================================
-   🔐 PASSWORD HASHING (NO TS ERROR)
+   PASSWORD HASHING (NO TS ERROR)
 ===================================================== */
 
 userSchema.pre("save", async function () {

@@ -1,5 +1,4 @@
-import mongoose from "mongoose";
-import { Schema } from "mongoose";
+import mongoose, { Schema, Document } from "mongoose";
 
 export interface IEarning extends Document {
     creator: mongoose.Types.ObjectId;
@@ -12,18 +11,21 @@ export interface IEarning extends Document {
 
 const EarningSchema = new Schema<IEarning>(
     {
-        creator: { type: Schema.Types.ObjectId, ref: "User", required: true },
-        purchase: { type: Schema.Types.ObjectId, ref: "Purchase", required: true },
-        grossAmount: Number,
-        platformFee: Number,
-        netAmount: Number,
+        creator: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+        purchase: { type: Schema.Types.ObjectId, ref: "Purchase", required: true, unique: true },
+        grossAmount: { type: Number, required: true },
+        platformFee: { type: Number, required: true },
+        netAmount: { type: Number, required: true },
         status: {
             type: String,
             enum: ["pending", "available", "reversed"],
             default: "pending",
+            index: true,
         },
     },
     { timestamps: true }
 );
+
+EarningSchema.index({ status: 1, createdAt: 1 });
 
 export default mongoose.model<IEarning>("Earning", EarningSchema);

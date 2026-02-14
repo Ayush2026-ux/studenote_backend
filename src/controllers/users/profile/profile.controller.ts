@@ -1,29 +1,26 @@
-//controllers\users\profile\profile.controller.ts
+// controllers/users/profile/profile.controller.ts
 import { Request, Response } from "express";
 import mongoose from "mongoose";
 
 import NoteUploads from "../../../models/users/NotesUpload";
-import Feed from "../../../models/users/feed.models";
-import FeedView from "../../../models/users/feedView.models";
 import followModule from "../../../models/users/follow.module";
+import purchaseModel from "../../../models/payments/purchase.model";
 
 /* ======================================================
    GET PROFILE STATS
    - Total Notes Uploaded
-   - Total Views (from FeedView, linked via Feed → Note)
    - Followers / Following
+   - Total Earnings (from paid purchases of user's notes)
 ====================================================== */
 
 export const getProfileStats = async (req: Request, res: Response) => {
     try {
-        //  Disable cache (fixes 304 + stale stats)
+        // 🚫 Disable cache (fixes 304 + stale stats)
         res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
         res.setHeader("Pragma", "no-cache");
         res.setHeader("Expires", "0");
 
-        const userId =
-            (req as any).user?.id ||
-            (req as any).user?._id;
+        const userId = (req as any).user?.id || (req as any).user?._id;
 
         if (!mongoose.Types.ObjectId.isValid(userId)) {
             return res.status(400).json({
@@ -36,59 +33,50 @@ export const getProfileStats = async (req: Request, res: Response) => {
 
         /* ================= FOLLOWERS / FOLLOWING ================= */
 
-        const followers = await followModule.countDocuments({
-            following: userObjectId,
-        });
-
-        const following = await followModule.countDocuments({
-            follower: userObjectId,
-        });
+        const [followers, following] = await Promise.all([
+            followModule.countDocuments({ following: userObjectId }),
+            followModule.countDocuments({ follower: userObjectId }),
+        ]);
 
         /* ================= USER NOTES ================= */
 
-        const userNotes = await NoteUploads.find(
+        const noteIds = await NoteUploads.find(
             {
                 uploadedBy: userObjectId,
                 isDeleted: { $ne: true }, // safe even if field doesn't exist
             },
             { _id: 1 }
-        ).lean();
+        ).lean().then(notes => notes.map(n => n._id));
 
-        const noteIds = userNotes.map((n) => n._id);
         const notes = noteIds.length;
 
-        /* ================= FEEDS FOR THOSE NOTES ================= */
+        /* ================= TOTAL EARNINGS ================= */
 
-        let views = 0;
+        let totalEarnings = 0;
 
         if (noteIds.length > 0) {
-            const feeds = await Feed.find(
+            const earningsAgg = await purchaseModel.aggregate([
+                { $match: { note: { $in: noteIds }, status: "paid" } },
                 {
-                    note: { $in: noteIds },
-                    isActive: true,
+                    $group: {
+                        _id: null,
+                        total: { $sum: { $subtract: ["$amount", "$platformFee"] } }, // net earnings
+                    },
                 },
-                { _id: 1 }
-            ).lean();
+            ]);
 
-            const feedIds = feeds.map((f) => f._id);
-
-            /* ================= REAL VIEWS (FeedView) ================= */
-
-            if (feedIds.length > 0) {
-                views = await FeedView.countDocuments({
-                    feed: { $in: feedIds },
-                });
-            }
+            totalEarnings = earningsAgg.length ? earningsAgg[0].total : 0;
         }
 
         /* ================= RESPONSE ================= */
+
         return res.status(200).json({
             success: true,
             data: {
                 followers,
                 following,
                 notes,
-                views,
+                totalEarnings, // ✅ new field
             },
         });
     } catch (error) {

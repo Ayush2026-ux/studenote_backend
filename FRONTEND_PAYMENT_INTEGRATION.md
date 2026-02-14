@@ -352,7 +352,7 @@ export default function RazorpayCheckout({ noteId }: { noteId: string }) {
           });
 
           if (verifyRes.ok) {
-            alert('✅ Payment successful!');
+            alert(' Payment successful!');
           }
         }
       };
@@ -379,19 +379,19 @@ export default function RazorpayCheckout({ noteId }: { noteId: string }) {
 
 ## 7. Razorpay Checkout Features
 
-✅ **Smart Payment Gateway**
+ **Smart Payment Gateway**
 - Shows best payment methods for user
 - Auto-detects location
 - Multiple currency support
 - Device-optimized UI
 
-✅ **Security**
+ **Security**
 - PCI-DSS compliant
 - Encrypted transactions
 - HTTPS only
 - 3D Secure support
 
-✅ **Customization**
+ **Customization**
 - Custom theme colors
 - Logo upload
 - Branding options

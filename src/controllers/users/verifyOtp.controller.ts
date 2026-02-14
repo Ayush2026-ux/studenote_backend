@@ -6,15 +6,14 @@ import LoginActivity from "../../models/users/loginActivity.model";
 import {
   generateAccessToken,
   generateRefreshToken,
+  generateAdminAccessToken,
+  generateAdminRefreshToken,
 } from "../../utils/jwt";
 import { sendLoginAlertEmail } from "../../utils/sendLoginAlertEmail";
 import { getLocationFromIp } from "../../utils/getLocationFromIp";
-import { getClientIp } from "../../utils/getClientIp"; // 🔥 ADD THIS
+import { getClientIp } from "../../utils/getClientIp";
 
-export const verifyOtpController = async (
-  req: Request,
-  res: Response
-) => {
+export const verifyOtpController = async (req: Request, res: Response) => {
   try {
     const { userId, otp, deviceName } = req.body;
 
@@ -33,20 +32,18 @@ export const verifyOtpController = async (
       });
     }
 
-    /* ================= FIND USER ================= */
-    const user = await User.findById(userId).select(
-      "+otp +otpExpiry"
-    );
+    /* ================= FIND USER (USER OR ADMIN) ================= */
+    const user = await User.findById(userId).select("+otp +otpExpiry");
 
     if (!user || !user.otp || !user.otpExpiry) {
       return res.status(400).json({
         success: false,
-        message: "OTP expired or not requested",
+        message: "OTP expired or already used",
       });
     }
 
-    /* ================= OTP CHECK ================= */
-    if (user.otpExpiry < new Date()) {
+    /* ================= OTP EXPIRY ================= */
+    if (user.otpExpiry.getTime() < Date.now()) {
       user.otp = undefined;
       user.otpExpiry = undefined;
       await user.save();
@@ -57,6 +54,7 @@ export const verifyOtpController = async (
       });
     }
 
+    /* ================= OTP MATCH ================= */
     if (String(user.otp).trim() !== String(otp).trim()) {
       return res.status(400).json({
         success: false,
@@ -64,7 +62,7 @@ export const verifyOtpController = async (
       });
     }
 
-    /* ================= CLEAR OTP ================= */
+    /* ================= CLEAR OTP (PREVENT REUSE) ================= */
     user.otp = undefined;
     user.otpExpiry = undefined;
     user.otpAttempts = 0;
@@ -72,30 +70,28 @@ export const verifyOtpController = async (
     user.lastLoginAt = new Date();
 
     /* ================= REAL IP ================= */
-    const ipAddress = getClientIp(req); // 🔥 FIX
+    const ipAddress = getClientIp(req);
     user.lastLoginIp = ipAddress;
 
-    /* ================= TOKENS ================= */
-    const accessToken = generateAccessToken({
-      userId: user._id.toString(),
-    });
+    /* ================= TOKENS (ROLE BASED) ================= */
+    const accessToken =
+      user.role === "admin"
+        ? generateAdminAccessToken({ userId: user._id.toString() })
+        : generateAccessToken({ userId: user._id.toString() });
 
-    const refreshToken = generateRefreshToken({
-      userId: user._id.toString(),
-    });
+    const refreshToken =
+      user.role === "admin"
+        ? generateAdminRefreshToken({ userId: user._id.toString() })
+        : generateRefreshToken({ userId: user._id.toString() });
 
     await user.save();
 
     /* ================= DEVICE & LOCATION ================= */
     const userAgent = req.headers["user-agent"] || "unknown";
-    const device =
-      deviceName ||
-      userAgent ||
-      "Unknown device";
-
+    const device = deviceName || userAgent || "Unknown device";
     const location = await getLocationFromIp(ipAddress);
 
-    /* ================= SESSION CREATE ================= */
+    /* ================= SESSION ================= */
     await Session.create({
       userId: user._id,
       token: refreshToken,
@@ -117,16 +113,12 @@ export const verifyOtpController = async (
 
     /* ================= LOGIN ALERT ================= */
     if (user.loginAlertEnabled === true) {
-      try {
-        await sendLoginAlertEmail({
-          to: user.email,
-          device,
-          ip: ipAddress,
-          time: new Date(),
-        });
-      } catch (err) {
-        console.error("LOGIN ALERT EMAIL FAILED:", err);
-      }
+      sendLoginAlertEmail({
+        to: user.email,
+        device,
+        ip: ipAddress,
+        time: new Date(),
+      }).catch((err) => console.error("LOGIN ALERT EMAIL FAILED:", err));
     }
 
     /* ================= RESPONSE ================= */
@@ -149,14 +141,11 @@ export const verifyOtpController = async (
         lastLoginIp: user.lastLoginIp,
       },
     });
-
   } catch (error: any) {
     console.error("VERIFY OTP ERROR:", error);
     return res.status(500).json({
       success: false,
-      message:
-        error?.message ||
-        "Internal server error during OTP verification",
+      message: error?.message || "Internal server error during OTP verification",
     });
   }
 };

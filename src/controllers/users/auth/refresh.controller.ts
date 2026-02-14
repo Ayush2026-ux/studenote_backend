@@ -5,8 +5,6 @@ import jwt from "jsonwebtoken";
 
 export const refreshTokenController = async (req: Request, res: Response) => {
   try {
-    console.log("REFRESH BODY:", req.body);
-
     const { refreshToken } = req.body;
 
     if (!refreshToken) {
@@ -21,9 +19,7 @@ export const refreshTokenController = async (req: Request, res: Response) => {
       process.env.JWT_REFRESH_SECRET!
     );
 
-    // ✅ FIX: SUPPORT BOTH userId AND _id
     const userId = decoded.userId || decoded._id;
-
     if (!userId) {
       return res.status(401).json({
         success: false,
@@ -39,9 +35,9 @@ export const refreshTokenController = async (req: Request, res: Response) => {
       });
     }
 
+    //  FIX: Don't strictly match token to avoid race condition
     const session = await Session.findOne({
       userId: user._id,
-      token: refreshToken,
       isRevoked: false,
     });
 
