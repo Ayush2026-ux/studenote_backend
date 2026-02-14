@@ -1,14 +1,17 @@
 import nodemailer from "nodemailer";
 
 export const mailTransporter = nodemailer.createTransport({
-  host: process.env.MAIL_HOST,
-  port: Number(process.env.MAIL_PORT || 587),
-  secure: false, // true only for 465
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false, // 587
   auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS, // App Password if Gmail
+    user: process.env.MAIL_USER,      // studenote3@gmail.com
+    pass: process.env.MAIL_PASS,      // Gmail App Password
   },
   tls: {
-    rejectUnauthorized: false, // fixes SSL issues on many VPS/GoDaddy
+    rejectUnauthorized: false,
   },
+  pool: true,          // helps in prod
+  maxConnections: 5,
+  maxMessages: 100,
 });
