@@ -7,7 +7,7 @@ export const sendWelcomeMail = async (
   await mailTransporter.sendMail({
     from: process.env.MAIL_FROM,
     to: email,
-    subject: "🎉 Welcome to Studenotes, ${fullName}!",
+    subject: `🎉 Welcome to Studenotes, ${fullName}!`,
     html: `
       <div style="background:#f3f4f6;padding:40px 0;
         font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial;">
