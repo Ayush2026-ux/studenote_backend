@@ -1,4 +1,4 @@
-import { mailTransporter } from "../../config/mail";
+import { sendEmail } from "../../config/mail";
 
 interface ApprovalEmailParams {
     userEmail: string;
@@ -13,7 +13,7 @@ export const sendNoteApprovalEmail = async ({
 }: ApprovalEmailParams): Promise<void> => {
     try {
         const mailOptions = {
-            from: process.env.MAIL_USER,
+            from: process.env.SES_FROM_EMAIL,
             to: userEmail,
             subject: "✅ Your Note Has Been Approved - StudentNote",
             html: `
@@ -63,7 +63,7 @@ export const sendNoteApprovalEmail = async ({
             `,
         };
 
-        await mailTransporter.sendMail(mailOptions);
+        await sendEmail(mailOptions);
         console.log(`✅ Approval email sent to ${userEmail}`);
     } catch (error) {
         console.error("❌ Error sending approval email:", error);

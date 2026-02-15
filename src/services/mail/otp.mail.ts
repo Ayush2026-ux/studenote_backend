@@ -1,12 +1,12 @@
-import { mailTransporter } from "../../config/mail";
 
 /* =====================================================
    LOGIN / REGISTER / FORGOT PASSWORD OTP MAIL
 ===================================================== */
 
+import { sendEmail } from "../../config/mail";
+
 export const sendOtpMail = async (email: string, otp: string) => {
-  await mailTransporter.sendMail({
-    from: process.env.MAIL_FROM,
+  await sendEmail({
     to: email,
     subject: "🔐 Your Studenotes Login Code",
     html: `
@@ -67,8 +67,7 @@ export const sendChangePasswordOtpMail = async (
   email: string,
   otp: string
 ) => {
-  await mailTransporter.sendMail({
-    from: process.env.MAIL_FROM,
+  await sendEmail({
     to: email,
     subject: "🔒 Studenotes Password Change OTP",
     html: `

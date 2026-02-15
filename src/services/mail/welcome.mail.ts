@@ -1,11 +1,10 @@
-import { mailTransporter } from "../../config/mail";
+import { sendEmail } from "../../config/mail";
 
 export const sendWelcomeMail = async (
   email: string,
   fullName: string
 ): Promise<void> => {
-  await mailTransporter.sendMail({
-    from: process.env.MAIL_FROM,
+  await sendEmail({
     to: email,
     subject: `🎉 Welcome to Studenotes, ${fullName}!`,
     html: `

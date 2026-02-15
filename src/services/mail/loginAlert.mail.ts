@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import { sendEmail } from "../../config/mail";
 
 interface LoginAlertPayload {
   to: string;
@@ -13,24 +13,27 @@ export const sendLoginAlertEmail = async ({
   ip,
   time,
 }: LoginAlertPayload) => {
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.MAIL_USER,
-      pass: process.env.MAIL_PASS,
-    },
-  });
-
-  await transporter.sendMail({
-    from: `"Studenote Security" <${process.env.MAIL_USER}>`,
+  await sendEmail({
+    from: `"Studenote Security" <${process.env.SES_FROM_EMAIL}>`,
     to,
     subject: "🔐 New Login Detected",
     html: `
-      <h3>New login to your account</h3>
-      <p><b>Device:</b> ${device}</p>
-      <p><b>IP Address:</b> ${ip}</p>
-      <p><b>Time:</b> ${time.toLocaleString()}</p>
-      <p>If this wasn't you, change your password immediately.</p>
+      <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+        <h3>New login to your account</h3>
+        <p><b>Device:</b> ${device}</p>
+        <p><b>IP Address:</b> ${ip}</p>
+        <p><b>Time:</b> ${new Date(time).toLocaleString()}</p>
+        <p>If this wasn't you, change your password immediately.</p>
+        <p>— Team Studenote</p>
+      </div>
     `,
+    text: `New login to your account
+Device: ${device}
+IP Address: ${ip}
+Time: ${new Date(time).toLocaleString()}
+
+If this wasn't you, change your password immediately.
+— Team Studenote`,
+    replyTo: "studenote3@gmail.com", // optional
   });
 };

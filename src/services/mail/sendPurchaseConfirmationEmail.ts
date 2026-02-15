@@ -1,34 +1,33 @@
-import { mailTransporter } from "../../config/mail";
+import { sendEmail } from "../../config/mail";
 
 interface PurchaseConfirmationPayload {
-    to: string;
-    userName: string;
-    noteName: string;
-    noteAuthor: string;
-    amount: number;
-    platformFee: number;
-    totalAmount: number;
-    purchaseDate: Date;
-    purchaseId: string;
+  to: string;
+  userName: string;
+  noteName: string;
+  noteAuthor: string;
+  amount: number;
+  platformFee: number;
+  totalAmount: number;
+  purchaseDate: Date;
+  purchaseId: string;
 }
 
 export const sendPurchaseConfirmationEmail = async ({
-    to,
-    userName,
-    noteName,
-    noteAuthor,
-    amount,
-    platformFee,
-    totalAmount,
-    purchaseDate,
-    purchaseId,
+  to,
+  userName,
+  noteName,
+  noteAuthor,
+  amount,
+  platformFee,
+  totalAmount,
+  purchaseDate,
+  purchaseId,
 }: PurchaseConfirmationPayload) => {
-    try {
-        await mailTransporter.sendMail({
-            from: `"Studenote" <${process.env.MAIL_USER}>`,
-            to,
-            subject: "✅ Purchase Confirmation - Studenote",
-            html: `
+  try {
+    await sendEmail({
+      to,
+      subject: "✅ Purchase Confirmation - Studenote",
+      html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <h2 style="color: #333;">Thank you for your purchase! 🎉</h2>
           
@@ -77,10 +76,10 @@ export const sendPurchaseConfirmationEmail = async ({
           </div>
         </div>
       `,
-        });
-        console.log("Purchase confirmation email sent to:", to);
-    } catch (error) {
-        console.error("Error sending purchase confirmation email:", error);
-        throw error;
-    }
+    });
+    console.log("Purchase confirmation email sent to:", to);
+  } catch (error) {
+    console.error("Error sending purchase confirmation email:", error);
+    throw error;
+  }
 };

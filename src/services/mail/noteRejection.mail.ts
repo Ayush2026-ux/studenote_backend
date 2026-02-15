@@ -1,4 +1,4 @@
-import { mailTransporter } from "../../config/mail";
+import { sendEmail } from "../../config/mail";
 
 interface RejectionEmailParams {
     userEmail: string;
@@ -15,7 +15,7 @@ export const sendNoteRejectionEmail = async ({
 }: RejectionEmailParams): Promise<void> => {
     try {
         const mailOptions = {
-            from: process.env.MAIL_USER,
+            from: process.env.SES_FROM_EMAIL,
             to: userEmail,
             subject: "📋 Your Note Has Been Rejected - StudentNote",
             html: `
@@ -60,7 +60,7 @@ export const sendNoteRejectionEmail = async ({
             `,
         };
 
-        await mailTransporter.sendMail(mailOptions);
+        await sendEmail(mailOptions);
         console.log(`✅ Rejection email sent to ${userEmail}`);
     } catch (error) {
         console.error("❌ Error sending rejection email:", error);

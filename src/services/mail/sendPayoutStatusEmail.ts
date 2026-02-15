@@ -1,33 +1,33 @@
-import { mailTransporter } from "../../config/mail";
+import { sendEmail } from "../../config/mail";
 
 type PayoutMailStatus = "approved" | "completed" | "rejected" | "failed";
 
 export const sendPayoutStatusEmail = async ({
-    to,
-    userName,
-    amount,
-    netAmount,
-    method,
-    status,
-    reason,
+  to,
+  userName,
+  amount,
+  netAmount,
+  method,
+  status,
+  reason,
 }: {
-    to: string;
-    userName: string;
-    amount: number;
-    netAmount: number;
-    method: "upi" | "bank";
-    status: PayoutMailStatus;
-    reason?: string;
+  to: string;
+  userName: string;
+  amount: number;
+  netAmount: number;
+  method: "upi" | "bank";
+  status: PayoutMailStatus;
+  reason?: string;
 }) => {
-    const subjectMap: Record<PayoutMailStatus, string> = {
-        approved: "Your Studenote withdrawal is approved ⏳",
-        completed: "Your Studenote withdrawal is successful ✅",
-        rejected: "Your Studenote withdrawal was rejected ❌",
-        failed: "Your Studenote withdrawal failed ⚠️",
-    };
+  const subjectMap: Record<PayoutMailStatus, string> = {
+    approved: "Your Studenote withdrawal is approved ⏳",
+    completed: "Your Studenote withdrawal is successful ✅",
+    rejected: "Your Studenote withdrawal was rejected ❌",
+    failed: "Your Studenote withdrawal failed ⚠️",
+  };
 
-    const textMessageMap: Record<PayoutMailStatus, string> = {
-        approved: `
+  const textMessageMap: Record<PayoutMailStatus, string> = {
+    approved: `
 Hi ${userName},
 
 Your withdrawal request has been approved by our team ✅
@@ -41,7 +41,7 @@ Your payout is now being processed and will reach your account shortly.
 Thanks for using Studenote 💙
 Team Studenote
 `,
-        completed: `
+    completed: `
 Hi ${userName},
 
 Good news! 🎉
@@ -57,7 +57,7 @@ If you have any questions, just reply to this email.
 Thanks for using Studenote 💙
 Team Studenote
 `,
-        rejected: `
+    rejected: `
 Hi ${userName},
 
 Unfortunately, your withdrawal request was rejected by our team.
@@ -70,7 +70,7 @@ Please update your payment details and try again.
 Thanks,
 Team Studenote
 `,
-        failed: `
+    failed: `
 Hi ${userName},
 
 Your withdrawal request failed due to a technical issue.
@@ -81,10 +81,10 @@ Please try again later or contact support.
 Thanks,
 Team Studenote
 `,
-    };
+  };
 
-    const htmlMessageMap: Record<PayoutMailStatus, string> = {
-        approved: `
+  const htmlMessageMap: Record<PayoutMailStatus, string> = {
+    approved: `
       <div style="font-family: Arial, sans-serif; line-height: 1.6;">
         <h2>Hi ${userName},</h2>
         <p><b>Your withdrawal request has been approved ✅</b></p>
@@ -98,7 +98,7 @@ Team Studenote
         <p>— Team Studenote</p>
       </div>
     `,
-        completed: `
+    completed: `
       <div style="font-family: Arial, sans-serif; line-height: 1.6;">
         <h2>Hi ${userName},</h2>
         <p><b>Good news! 🎉</b></p>
@@ -113,7 +113,7 @@ Team Studenote
         <p>— Team Studenote</p>
       </div>
     `,
-        rejected: `
+    rejected: `
       <div style="font-family: Arial, sans-serif; line-height: 1.6;">
         <h2>Hi ${userName},</h2>
         <p>Your withdrawal request was <b>rejected</b>.</p>
@@ -122,7 +122,7 @@ Team Studenote
         <p>— Team Studenote</p>
       </div>
     `,
-        failed: `
+    failed: `
       <div style="font-family: Arial, sans-serif; line-height: 1.6;">
         <h2>Hi ${userName},</h2>
         <p>Your withdrawal request <b>failed</b> due to a technical issue.</p>
@@ -131,13 +131,13 @@ Team Studenote
         <p>— Team Studenote</p>
       </div>
     `,
-    };
+  };
 
-    await mailTransporter.sendMail({
-        from: `"Studenote" <${process.env.SMTP_USER}>`,
-        to,
-        subject: subjectMap[status],
-        text: textMessageMap[status],
-        html: htmlMessageMap[status],
-    });
+  await sendEmail({
+    from: `"Studenote" <${process.env.SES_FROM_EMAIL}>`,
+    to,
+    subject: subjectMap[status],
+    text: textMessageMap[status],
+    html: htmlMessageMap[status],
+  });
 };
