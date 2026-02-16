@@ -3,10 +3,15 @@ import nodemailer from "nodemailer";
 
 const isProd = process.env.NODE_ENV === "production";
 
+// ENV switches (no code change needed later)
+const MAIL_HOST = process.env.MAIL_HOST || "smtp.gmail.com"; // try: smtp-relay.gmail.com
+const MAIL_PORT = Number(process.env.MAIL_PORT || 587);      // try: 465
+const MAIL_SECURE = process.env.MAIL_SECURE === "true" || MAIL_PORT === 465;
+
 const transporter = nodemailer.createTransport({
-  host: process.env.MAIL_HOST || "smtp.gmail.com",
-  port: Number(process.env.MAIL_PORT) || 587,
-  secure: false, // 587 -> false, 465 -> true
+  host: MAIL_HOST,
+  port: MAIL_PORT,
+  secure: MAIL_SECURE, // true for 465, false for 587
   auth: {
     user: process.env.MAIL_USER!,
     pass: process.env.MAIL_PASS!,
@@ -14,19 +19,38 @@ const transporter = nodemailer.createTransport({
   tls: {
     rejectUnauthorized: false,
   },
+
+  // Pooling (prod-friendly)
   pool: true,
   maxConnections: 5,
   maxMessages: 100,
-  logger: !isProd,  // nodemailer internal logs (dev only)
-  debug: !isProd,   // SMTP debug (dev only)
+
+  // Timeouts (helps with slow/blocked networks)
+  connectionTimeout: 60_000,
+  greetingTimeout: 30_000,
+  socketTimeout: 60_000,
+
+  // Debug (dev only)
+  logger: !isProd,
+  debug: !isProd,
 });
 
 // Optional: verify transporter on startup
-transporter.verify((err, success) => {
+transporter.verify((err) => {
   if (err) {
-    console.error("❌ Mail transporter verify failed:", err);
+    console.error("❌ Mail transporter verify failed:", {
+      message: err?.message,
+      code: (err as any)?.code,
+      host: MAIL_HOST,
+      port: MAIL_PORT,
+      secure: MAIL_SECURE,
+    });
   } else if (!isProd) {
-    console.log("✅ Mail transporter ready");
+    console.log("✅ Mail transporter ready", {
+      host: MAIL_HOST,
+      port: MAIL_PORT,
+      secure: MAIL_SECURE,
+    });
   }
 });
 
@@ -59,6 +83,7 @@ export async function sendEmail({
       console.log("📤 Sending email:", {
         to: mailOptions.to,
         subject: mailOptions.subject,
+        via: { host: MAIL_HOST, port: MAIL_PORT, secure: MAIL_SECURE },
       });
     }
 
@@ -77,9 +102,8 @@ export async function sendEmail({
       message: error?.message,
       code: error?.code,
       response: error?.response,
+      via: { host: MAIL_HOST, port: MAIL_PORT, secure: MAIL_SECURE },
     });
-
-    // Important: throw so API can return 500
     throw new Error("Failed to send email");
   }
 }
