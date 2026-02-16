@@ -60,7 +60,7 @@ app.post(
 
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: process.env.ORIGIN_URL || "http://localhost:3000",
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     credentials: true,
   })
