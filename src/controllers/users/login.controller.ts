@@ -69,7 +69,7 @@ export const login = async (req: Request, res: Response) => {
     }
 
     /* =================================================
-       🔥 UPDATE LAST LOGIN (THIS WAS MISSING)
+       UPDATE LAST LOGIN (THIS WAS MISSING)
        This fixes "Last Login" date in Login & Security
     ================================================= */
 
@@ -86,7 +86,7 @@ export const login = async (req: Request, res: Response) => {
 
     await user.save();
 
-    // 🔴 DEV ONLY (remove in production)
+    // DEV ONLY (remove in production)
     console.log("LOGIN OTP:", otp);
 
     /* ================= RESPONSE ================= */
