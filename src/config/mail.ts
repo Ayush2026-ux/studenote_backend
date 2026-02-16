@@ -1,12 +1,20 @@
 // config/mail.ts
-import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
+import nodemailer from "nodemailer";
 
-const ses = new SESClient({
-  region: process.env.AWS_SES_REGION!,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+const transporter = nodemailer.createTransport({
+  host: process.env.MAIL_HOST || "smtp.gmail.com",
+  port: Number(process.env.MAIL_PORT) || 587,
+  secure: false, // 587 -> false, 465 -> true
+  auth: {
+    user: process.env.MAIL_USER!,
+    pass: process.env.MAIL_PASS!,
   },
+  tls: {
+    rejectUnauthorized: false,
+  },
+  pool: true,
+  maxConnections: 5,
+  maxMessages: 100,
 });
 
 export async function sendEmail({
@@ -17,27 +25,23 @@ export async function sendEmail({
   html,
   replyTo,
 }: {
-  from?: string;              // optional, fallback to SES_FROM_EMAIL
+  from?: string;              // optional, fallback to MAIL_FROM
   to: string | string[];
   subject: string;
   text?: string;
   html?: string;
   replyTo?: string;
 }) {
-  const ToAddresses = Array.isArray(to) ? to : [to];
+  const mailOptions = {
+    from: from || process.env.MAIL_FROM!,
+    to: Array.isArray(to) ? to.join(",") : to,
+    subject,
+    text,
+    html,
+    replyTo,
+  };
 
-  const command = new SendEmailCommand({
-    Source: from || process.env.SES_FROM_EMAIL!,
-    Destination: { ToAddresses },
-    ReplyToAddresses: replyTo ? [replyTo] : undefined,
-    Message: {
-      Subject: { Data: subject, Charset: "UTF-8" },
-      Body: {
-        ...(html ? { Html: { Data: html, Charset: "UTF-8" } } : {}),
-        ...(text ? { Text: { Data: text, Charset: "UTF-8" } } : {}),
-      },
-    },
-  });
-
-  return ses.send(command);
+  return transporter.sendMail(mailOptions);
 }
+
+

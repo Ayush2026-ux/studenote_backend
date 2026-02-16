@@ -15,7 +15,7 @@ export const sendNoteRejectionEmail = async ({
 }: RejectionEmailParams): Promise<void> => {
     try {
         const mailOptions = {
-            from: process.env.SES_FROM_EMAIL,
+            from: process.env.MAIL_FROM,
             to: userEmail,
             subject: "📋 Your Note Has Been Rejected - StudentNote",
             html: `

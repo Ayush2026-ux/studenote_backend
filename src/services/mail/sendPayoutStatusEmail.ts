@@ -134,7 +134,7 @@ Team Studenote
   };
 
   await sendEmail({
-    from: `"Studenote" <${process.env.SES_FROM_EMAIL}>`,
+    from: `"Studenote" <${process.env.MAIL_FROM}>`,
     to,
     subject: subjectMap[status],
     text: textMessageMap[status],

@@ -14,7 +14,7 @@ export const sendLoginAlertEmail = async ({
   time,
 }: LoginAlertPayload) => {
   await sendEmail({
-    from: `"Studenote Security" <${process.env.SES_FROM_EMAIL}>`,
+    from: `"Studenote Security" <${process.env.MAIL_FROM}>`,
     to,
     subject: "🔐 New Login Detected",
     html: `

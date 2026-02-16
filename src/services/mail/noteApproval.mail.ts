@@ -13,9 +13,9 @@ export const sendNoteApprovalEmail = async ({
 }: ApprovalEmailParams): Promise<void> => {
     try {
         const mailOptions = {
-            from: process.env.SES_FROM_EMAIL,
+            from: process.env.MAIL_FROM,
             to: userEmail,
-            subject: "✅ Your Note Has Been Approved - StudentNote",
+            subject: " Your Note Has Been Approved - StudentNote",
             html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                     <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
