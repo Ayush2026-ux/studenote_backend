@@ -21,8 +21,13 @@ export async function sendEmail({
   try {
     const recipients = Array.isArray(to) ? to : [to];
 
+    const senderEmail = from || process.env.MAIL_FROM || "no-reply@studenote.co.in";
+
     const payload = {
-      sender: { email: (from || process.env.MAIL_FROM || "no-reply@studenote.co.in") },
+      sender: {
+        email: senderEmail,
+        name: "StudeNote",
+      },
       to: recipients.map((email) => ({ email })),
       subject,
       htmlContent: html || undefined,
@@ -30,14 +35,20 @@ export async function sendEmail({
       replyTo: replyTo ? { email: replyTo } : undefined,
     };
 
+    const API_KEY = process.env.BREVO_API_KEY;
+    if (!API_KEY) {
+      throw new Error("Brevo API key is not configured");
+    }
     const res = await axios.post("https://api.brevo.com/v3/smtp/email", payload, {
       headers: {
-        "api-key": process.env.BREVO_API_KEY!,
+        "api-key": API_KEY,
         "Content-Type": "application/json",
         Accept: "application/json",
       },
       timeout: 30_000,
     });
+
+
 
     if (!isProd) {
       console.log(" Brevo email sent:", {
