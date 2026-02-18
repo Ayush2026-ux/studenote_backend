@@ -17,6 +17,9 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.89.0
         version: 2.89.0
+      aws4:
+        specifier: ^1.13.2
+        version: 1.13.2
       axios:
         specifier: ^1.13.2
         version: 1.13.2
@@ -72,6 +75,9 @@ importers:
         specifier: ^4.3.4
         version: 4.3.5
     devDependencies:
+      '@types/aws4':
+        specifier: ^1.11.6
+        version: 1.11.6
       '@types/bcrypt':
         specifier: ^6.0.0
         version: 6.0.0
@@ -790,6 +796,9 @@ packages:
   '@tsconfig/node16@1.0.4':
     resolution: {integrity: sha512-vxhUy4J8lyeyinH7Azl1pdd43GJhZH/tP2weN8TntQblOY+A0XbT8DJk1/oCPuOOyg/Ja757rG0CgHcWC8OfMA==}
 
+  '@types/aws4@1.11.6':
+    resolution: {integrity: sha512-5CnVUkHNyLGpD9AnOcK66YyP0qvIh6nhJJoeK8zSl5YKikUcUbdB7SlHevUYVqicgeh6j5AJa1qa/h08dSZHoA==}
+
   '@types/bcrypt@6.0.0':
     resolution: {integrity: sha512-/oJGukuH3D2+D+3H4JWLaAsJ/ji86dhRidzZ/Od7H/i8g+aCmvkeCc6Ni/f9uxGLSQVCRZkX2/lqEFG2BvWtlQ==}
 
@@ -909,6 +918,9 @@ packages:
   aws-ssl-profiles@1.1.2:
     resolution: {integrity: sha512-NZKeq9AfyQvEeNlN0zSYAaWrmBffJh3IELMZfRpJVWgrpEbtEpnjvzqBPf+mxoI287JohRDoa+/nsfqqiZmF6g==}
     engines: {node: '>= 6.0.0'}
+
+  aws4@1.13.2:
+    resolution: {integrity: sha512-lHe62zvbTB5eEABUVi/AwVh0ZKY9rMMDhmm+eeyuuUQbQ3+J+fONVQOZyj+DdrvD4BY33uYniyRJ4UJIaSKAfw==}
 
   axios@1.13.2:
     resolution: {integrity: sha512-VPk9ebNqPcy5lRGuSlKx752IlDatOjT9paPlm8A7yOuW2Fbvp4X3JznJtT4f0GzGLLiWE9W8onz51SqLYwzGaA==}
@@ -3466,6 +3478,10 @@ snapshots:
 
   '@tsconfig/node16@1.0.4': {}
 
+  '@types/aws4@1.11.6':
+    dependencies:
+      '@types/node': 25.0.3
+
   '@types/bcrypt@6.0.0':
     dependencies:
       '@types/node': 25.0.3
@@ -3593,6 +3609,8 @@ snapshots:
   asynckit@0.4.0: {}
 
   aws-ssl-profiles@1.1.2: {}
+
+  aws4@1.13.2: {}
 
   axios@1.13.2:
     dependencies:
