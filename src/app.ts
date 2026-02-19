@@ -75,13 +75,18 @@ app.use(
         return callback(null, true);
       }
 
-      return callback(new Error("Not allowed by CORS"));
+      // ❌ Don't throw error (breaks preflight / causes 502)
+      return callback(null, false);
     },
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
-app.options("*", cors()); // Pre-flight for all routes
+
+// Handle preflight safely
+app.options("*", cors());
+
 app.use(helmet());
 app.use(morgan("dev"));
 
