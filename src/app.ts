@@ -65,6 +65,10 @@ const allowedOrigins = [
   "http://localhost:19006", // Expo web (dev)
 ];
 
+if (process.env.ORIGIN_URL) {
+  allowedOrigins.push(process.env.ORIGIN_URL);
+}
+
 app.use(
   cors({
     origin: (origin, callback) => {
