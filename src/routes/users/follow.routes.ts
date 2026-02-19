@@ -1,5 +1,5 @@
 import { Router } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { authGuard } from "../../middlewares/auth.middleware";
 import {
     followUser,
@@ -11,14 +11,21 @@ import {
 const router = Router();
 
 const followLimiter = rateLimit({
-    windowMs: 60 * 1000,
+    windowMs: 60 * 1000, // 1 minute
     max: 20,
     standardHeaders: true,
     legacyHeaders: false,
+
     keyGenerator: (req, res) => {
-        return (req as any).user?._id
-            ? `user:${(req as any).user._id.toString()}`
-            : req.ip || req.socket.remoteAddress || "unknown";
+        const userId = (req as any)?.user?._id;
+
+        // Logged-in user → rate limit per user
+        if (userId) {
+            return `user:${userId.toString()}`;
+        }
+
+        // Guest → IPv6-safe IP-based rate limit
+        return ipKeyGenerator(req as any);
     },
 });
 
