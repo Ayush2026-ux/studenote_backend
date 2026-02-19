@@ -202,16 +202,19 @@ export const getNotePreview = async (req: Request, res: Response) => {
            5️ RESPONSE HEADERS (FRONTEND TRUST + NGROK FIX)
         ====================================================== */
         res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", "inline");
+        res.setHeader("Content-Disposition", 'inline; filename="preview.pdf"');
+        res.setHeader("Accept-Ranges", "bytes");              // 🔥 REQUIRED for Android WebView
+        res.setHeader("Content-Length", previewBytes.length); // 🔥 REQUIRED
         res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
         res.setHeader("Pragma", "no-cache");
         res.setHeader("ngrok-skip-browser-warning", "true");
 
-        //  Preview metadata (frontend UX)
+        // Preview metadata (frontend UX)
         res.setHeader("X-Preview-Pages", previewPageCount.toString());
         res.setHeader("X-Total-Pages", totalPages.toString());
 
-        return res.send(Buffer.from(previewBytes));
+        return res.status(200).send(Buffer.from(previewBytes));
+
     } catch (error) {
         console.error("PDF PREVIEW ERROR:", error);
         return res.status(500).json({
