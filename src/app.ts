@@ -57,39 +57,36 @@ app.post(
 /* ===============================
    2 GLOBAL MIDDLEWARES
 ================================ */
-
 const allowedOrigins = [
   "https://www.studenote.co.in",
   "https://studenote.co.in",
   "http://localhost:3000",
-  "http://localhost:19006", // Expo web (dev)
+  "http://localhost:19006",
 ];
 
 if (process.env.ORIGIN_URL) {
   allowedOrigins.push(process.env.ORIGIN_URL);
 }
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Mobile apps / server-to-server calls don't send Origin
-      if (!origin) return callback(null, true);
+// 1. Configure CORS once
+const corsOptions = {
+  origin: (origin:any, callback:(err: any, allow: boolean) => void) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, false);
+    }
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  credentials: true,
+  allowedHeaders: ["Content-Type", "Authorization"],
+};
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
+// 2. Apply it globally
+app.use(cors(corsOptions));
 
-      // ❌ Don't throw error (breaks preflight / causes 502)
-      return callback(null, false);
-    },
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    credentials: true,
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
-
-// Handle preflight safely
-app.use(cors());
+// 3. (Optional) Explicitly enable pre-flight for all routes
+app.options("*", cors(corsOptions));
 
 app.use(helmet());
 app.use(morgan("dev"));
