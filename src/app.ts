@@ -58,14 +58,30 @@ app.post(
    2 GLOBAL MIDDLEWARES
 ================================ */
 
+const allowedOrigins = [
+  "https://www.studenote.co.in",
+  "https://studenote.co.in",
+  "http://localhost:3000",
+  "http://localhost:19006", // Expo web (dev)
+];
+
 app.use(
   cors({
-    origin: process.env.ORIGIN_URL || "http://localhost:3000",
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+    origin: (origin, callback) => {
+      // Mobile apps / server-to-server calls don't send Origin
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Not allowed by CORS"));
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     credentials: true,
   })
 );
-
+app.options("*", cors()); // Pre-flight for all routes
 app.use(helmet());
 app.use(morgan("dev"));
 
