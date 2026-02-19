@@ -85,9 +85,6 @@ const corsOptions = {
 // 2. Apply it globally
 app.use(cors(corsOptions));
 
-// 3. (Optional) Explicitly enable pre-flight for all routes
-app.options("/*", cors(corsOptions));
-
 app.use(helmet());
 app.use(morgan("dev"));
 
