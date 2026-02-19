@@ -70,7 +70,7 @@ if (process.env.ORIGIN_URL) {
 
 // 1. Configure CORS once
 const corsOptions = {
-  origin: (origin:any, callback:(err: any, allow: boolean) => void) => {
+  origin: (origin: any, callback: (err: any, allow: boolean) => void) => {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -86,7 +86,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // 3. (Optional) Explicitly enable pre-flight for all routes
-app.options("*", cors(corsOptions));
+app.options("/*", cors(corsOptions));
 
 app.use(helmet());
 app.use(morgan("dev"));
