@@ -12,17 +12,20 @@ import purchaseModel from "../../../models/payments/purchase.model";
    - Followers / Following
    - Total Earnings (from paid purchases of user's notes)
 ====================================================== */
+interface AuthRequest extends Request {
+    user?: { _id: string };
+}
 
-export const getProfileStats = async (req: Request, res: Response) => {
+export const getProfileStats = async (req: AuthRequest, res: Response) => {
     try {
-        // 🚫 Disable cache (fixes 304 + stale stats)
+        //Disable cache (fixes 304 + stale stats)
         res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
         res.setHeader("Pragma", "no-cache");
         res.setHeader("Expires", "0");
 
-        const userId = (req as any).user?.id || (req as any).user?._id;
+        const userId = req.user?._id;
 
-        if (!mongoose.Types.ObjectId.isValid(userId)) {
+        if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
             return res.status(400).json({
                 success: false,
                 message: "Invalid user",
@@ -76,7 +79,7 @@ export const getProfileStats = async (req: Request, res: Response) => {
                 followers,
                 following,
                 notes,
-                totalEarnings, // ✅ new field
+                totalEarnings, //  new field
             },
         });
     } catch (error) {

@@ -1,11 +1,22 @@
 import { Request, Response } from "express";
 import User from "../../models/users/users.models";
 
-export const logoutAllDevices = async (req: Request, res: Response) => {
-  try {
-    const userId = (req as any).user.userId;
+interface AuthRequest extends Request {
+  user?: { _id: string };
+}
 
-    // 🔥 Remove all refresh tokens / sessions
+export const logoutAllDevices = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?._id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: User not logged in",
+      });
+    }
+
+    //Remove all refresh tokens / sessions
     await User.findByIdAndUpdate(userId, {
       refreshToken: null,
       refreshTokenExpiry: null,

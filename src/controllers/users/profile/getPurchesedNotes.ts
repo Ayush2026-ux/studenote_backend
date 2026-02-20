@@ -1,10 +1,12 @@
 import { Request, Response } from "express";
 import mongoose from "mongoose";
 import purchaseModel from "../../../models/payments/purchase.model";
-
-export const getPurchasedNotes = async (req: Request, res: Response) => {
+interface AuthRequest extends Request {
+    user?: { _id: string };
+}
+export const getPurchasedNotes = async (req: AuthRequest, res: Response) => {
     try {
-        const userId = (req as any)?.user?._id;
+        const userId = req.user?._id;   // FIXED
 
         if (!userId) {
             return res.status(401).json({

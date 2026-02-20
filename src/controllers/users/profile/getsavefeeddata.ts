@@ -7,8 +7,12 @@ import saveModule from "../../../models/users/save.module";
 /* ======================================================
    GET SAVED FEEDS DATA (PROFILE → SAVED TAB)
 ====================================================== */
+interface AuthRequest extends Request {
+    user?: { _id: string };
+}
 
-export const getSaveFeedData = async (req: Request, res: Response) => {
+
+export const getSaveFeedData = async (req: AuthRequest, res: Response) => {
     try {
         // Disable cache (fixes 304 + stale UI)
         res.setHeader(
@@ -18,11 +22,9 @@ export const getSaveFeedData = async (req: Request, res: Response) => {
         res.setHeader("Pragma", "no-cache");
         res.setHeader("Expires", "0");
 
-        const userId =
-            (req as any).user?.id ||
-            (req as any).user?._id;
+        const userId = req.user?._id;
 
-        if (!mongoose.Types.ObjectId.isValid(userId)) {
+        if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
             return res.status(400).json({
                 success: false,
                 message: "Invalid user",

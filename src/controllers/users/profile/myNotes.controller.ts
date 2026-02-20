@@ -8,9 +8,13 @@ import shareModels from "../../../models/users/noteShare.model";
 import feedlike from "../../../models/users/feedlike";
 import Feed from "../../../models/users/feed.models";
 
-export const getMyNotesList = async (req: Request, res: Response) => {
+
+interface AuthRequest extends Request {
+    user?: { _id: string };
+}
+export const getMyNotesList = async (req: AuthRequest, res: Response) => {
     try {
-        const userId = (req as any)?.user?._id;
+        const userId = req.user?._id;
 
         if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
             return res.status(401).json({ success: false, message: "Unauthorized user" });
