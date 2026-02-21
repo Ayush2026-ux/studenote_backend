@@ -120,14 +120,13 @@ export const createNoteSchema = z
 
         thumbnail: z
             .string({ message: "Thumbnail is required" })
-            .url({ message: "Thumbnail must be a valid URL" }),
+            .min(1, { message: "Thumbnail is required" }),
 
         file: z
             .string({ message: "File is required" })
-            .url({ message: "File must be a valid URL" }),
+            .min(1, { message: "File is required" }),
 
         university: z.string().trim().optional(),
-
         pages: z
             .number({
                 message: "Pages must be a number",
