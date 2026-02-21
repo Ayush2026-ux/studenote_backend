@@ -13,7 +13,9 @@
   "license": "ISC",
   "packageManager": "pnpm@10.16.1",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.995.0",
     "@aws-sdk/client-ses": "^3.990.0",
+    "@aws-sdk/s3-request-presigner": "^3.995.0",
     "@prisma/client": "^7.2.0",
     "@supabase/supabase-js": "^2.89.0",
     "aws4": "^1.13.2",

@@ -2,11 +2,12 @@ import { Request, Response } from "express";
 import { PDFDocument } from "pdf-lib";
 import { createNoteSchema } from "../../../validators/note.zod";
 import NotesUpload from "../../../models/users/NotesUpload";
-import { uploadToSupabase } from "../../../services/users/uploadnots.services";
 import { promises as fs } from "fs";
+import { getS3SignedDownloadUrl, uploadToS3 } from "../../../services/users/uploadnots.services";
+
 
 /* =========================================================
-   CREATE NOTE CONTROLLER
+   CREATE NOTE CONTROLLER (S3 VERSION)
 ========================================================= */
 
 const UPLOAD_TIMEOUT = 1800000; // 30 minutes for very large files (80MB+)
@@ -21,24 +22,21 @@ export const createNote = async (
   res.setTimeout(UPLOAD_TIMEOUT);
 
   // Keep connection alive
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('Keep-Alive', `timeout=${KEEP_ALIVE_TIMEOUT / 1000}`);
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("Keep-Alive", `timeout=${KEEP_ALIVE_TIMEOUT / 1000}`);
 
-  // Disable TCP Keep-Alive buffering for faster data transmission
+  // Keep TCP connection alive
   if (req.socket) {
-    req.socket.setKeepAlive(true, 60000); // Keep-alive every 60 seconds
+    req.socket.setKeepAlive(true, 60000);
   }
 
   // Send periodic heartbeat to prevent timeout
   const heartbeatInterval = setInterval(() => {
-    if (!res.writableEnded) {
-      res.write(''); // Send empty chunk to keep connection alive
-    }
-  }, 20000); // Every 20 seconds for better responsiveness
+    if (!res.writableEnded) res.write("");
+  }, 20000);
 
   try {
     /* ================= AUTH CHECK ================= */
-
     if (!req.user || !req.user._id) {
       clearInterval(heartbeatInterval);
       return res.status(401).json({
@@ -48,7 +46,6 @@ export const createNote = async (
     }
 
     /* ================= FILE EXTRACTION ================= */
-
     const filesObj = req.files as { [key: string]: Express.Multer.File[] };
 
     const thumbnailFile =
@@ -68,7 +65,6 @@ export const createNote = async (
     }
 
     /* ================= FILE SIZE VALIDATION ================= */
-
     if (pdfFile.size > 150 * 1024 * 1024) {
       clearInterval(heartbeatInterval);
       return res.status(413).json({
@@ -86,7 +82,6 @@ export const createNote = async (
     }
 
     /* ================= READ PDF BUFFER ================= */
-
     let pdfBuffer: Buffer;
 
     if (pdfFile.buffer) {
@@ -102,7 +97,6 @@ export const createNote = async (
     }
 
     /* ================= PDF VALIDATION ================= */
-
     const header = pdfBuffer.toString("utf8", 0, 5);
     if (!header.startsWith("%PDF")) {
       clearInterval(heartbeatInterval);
@@ -135,31 +129,34 @@ export const createNote = async (
       });
     }
 
-    /* ================= UPLOAD TO SUPABASE ================= */
-
-    let thumbnailUrl: string;
-    let pdfUrl: string;
+    /* ================= UPLOAD TO S3 ================= */
+    let thumbnailKey: string;
+    let pdfKey: string;
 
     try {
-      console.log(`Uploading files: Thumbnail (${thumbnailFile.size} bytes), PDF (${pdfFile.size} bytes)`);
+      console.log(
+        `Uploading files to S3: Thumbnail (${thumbnailFile.size} bytes), PDF (${pdfFile.size} bytes)`
+      );
 
-      [thumbnailUrl, pdfUrl] = await Promise.all([
-        uploadToSupabase(thumbnailFile, "thumbnails"),
-        uploadToSupabase(pdfFile, "notes"),
+      const [thumbRes, pdfRes] = await Promise.all([
+        uploadToS3(thumbnailFile, "thumbnails", req.user._id),
+        uploadToS3(pdfFile, "notes", req.user._id),
       ]);
 
-      console.log("Files uploaded successfully to Supabase");
+      thumbnailKey = thumbRes.key;
+      pdfKey = pdfRes.key;
+
+      console.log("Files uploaded successfully to S3");
     } catch (uploadError: any) {
-      console.error("Upload error:", uploadError);
+      console.error("S3 upload error:", uploadError);
       clearInterval(heartbeatInterval);
       return res.status(502).json({
         success: false,
-        message: uploadError?.message || "Failed to upload files to Supabase",
+        message: uploadError?.message || "Failed to upload files to S3",
       });
     }
 
     /* ================= NORMALIZE DATA ================= */
-
     const normalizeSemester = (val: any) => {
       if (typeof val !== "string") return undefined;
       const cleaned = val.trim();
@@ -182,38 +179,40 @@ export const createNote = async (
       fileType: String(req.body.fileType),
       price: Number(req.body.price),
       pages: pageCount,
-      thumbnail: thumbnailUrl,
-      file: pdfUrl,
+      thumbnail: thumbnailKey, // store S3 key
+      file: pdfKey,           // store S3 key
       university: req.body.university?.trim() || undefined,
       uploadedBy: req.user._id,
     };
 
     /* ================= VALIDATION ================= */
-
     const validatedData = createNoteSchema.parse(noteData);
 
     /* ================= SAVE ================= */
-
     const newNote = await NotesUpload.create({
       ...validatedData,
       uploadedBy: req.user._id,
     });
 
-    // Clear heartbeat interval on success
     clearInterval(heartbeatInterval);
 
-    /* ================= RESPONSE ================= */
+    /* ================= OPTIONAL: RETURN PREVIEW URLS ================= */
+    const thumbnailUrl = await getS3SignedDownloadUrl(thumbnailKey, 60 * 60); // 1 hour
+    const pdfUrl = await getS3SignedDownloadUrl(pdfKey, 60 * 10); // 10 min
 
     return res.status(201).json({
       success: true,
       message: "Notes uploaded successfully",
-      data: newNote,
+      data: {
+        ...newNote.toObject(),
+        thumbnailUrl,
+        pdfUrl,
+      },
     });
   } catch (error: any) {
     clearInterval(heartbeatInterval);
     console.error("UPLOAD ERROR:", error);
 
-    // Handle specific error types
     if (error.name === "ZodError") {
       return res.status(400).json({
         success: false,
@@ -222,7 +221,6 @@ export const createNote = async (
       });
     }
 
-    // Timeout error
     if (error.code === "ETIMEDOUT" || error.message?.includes("timeout")) {
       return res.status(408).json({
         success: false,
@@ -236,6 +234,3 @@ export const createNote = async (
     });
   }
 };
-
-
-
