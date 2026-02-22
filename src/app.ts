@@ -68,23 +68,30 @@ if (process.env.ORIGIN_URL) {
   allowedOrigins.push(process.env.ORIGIN_URL);
 }
 
-// 1. Configure CORS once
 const corsOptions = {
   origin: (origin: any, callback: (err: any, allow: boolean) => void) => {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(null, false);
+      callback(new Error("Not allowed by CORS"), false);
     }
   },
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   credentials: true,
-  allowedHeaders: ["Content-Type", "Authorization"],
+
+  // IMPORTANT FIX
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "cache-control",
+  ],
 };
 
-// 2. Apply it globally
+// ✅ Apply globally
 app.use(cors(corsOptions));
 
+// ✅ Preflight fix (IMPORTANT for Railway / production)
+//app.options("*", cors(corsOptions));
 app.use(helmet());
 app.use(morgan("dev"));
 
