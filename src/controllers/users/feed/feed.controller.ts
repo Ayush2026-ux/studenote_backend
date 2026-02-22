@@ -1,6 +1,5 @@
 import { Request, Response } from "express";
 import mongoose from "mongoose";
-
 import Feed from "../../../models/users/feed.models";
 import FeedView from "../../../models/users/feedView.models";
 import FeedLike from "../../../models/users/feedlike";
@@ -10,10 +9,7 @@ import Follow from "../../../models/users/follow.module";
 
 import Purchase from "../../../models/payments/purchase.model";
 import { createFeedSchema } from "../../../validators/feed.zod";
-
-/* ======================================================
-   CREATE FEED (OPTIONAL – MANUAL / ADMIN)
-====================================================== */
+import { getS3SignedDownloadUrl } from "../../../services/users/uploadnots.services";
 
 export const createFeed = async (req: Request, res: Response) => {
     try {
@@ -79,22 +75,24 @@ export const getFeeds = async (req: Request, res: Response) => {
         const limit = Math.min(Number(req.query.limit) || 10, 10);
         const userId = (req as any)?.user?.id;
 
-        // Properly decode URL-encoded seenIds parameter
-        const seenIdsRaw = (req.query.seenIds as string | undefined)
+        /* ================= PARSE seenIds ================= */
+        const seenIdsRaw = req.query.seenIds
             ? decodeURIComponent(req.query.seenIds as string)
                 .split(",")
-                .map((id: string) => id.trim())
-                .filter((id: string) => mongoose.Types.ObjectId.isValid(id))
+                .map((id) => id.trim())
+                .filter((id) => mongoose.Types.ObjectId.isValid(id))
                 .slice(-50)
             : [];
 
         const seenIds = Array.from(new Set(seenIdsRaw)).map(
-            (id: string) => new mongoose.Types.ObjectId(id)
+            (id) => new mongoose.Types.ObjectId(id)
         );
 
+        /* ================= BUILD QUERY ================= */
         const query: any = { isActive: true, visibility: "public" };
         if (seenIds.length) query._id = { $nin: seenIds };
 
+        /* ================= FETCH FEEDS ================= */
         const feeds = await Feed.find(query)
             .sort({ score: -1, createdAt: -1 })
             .limit(limit)
@@ -103,31 +101,58 @@ export const getFeeds = async (req: Request, res: Response) => {
             .populate("note", "title course description thumbnail price file")
             .lean();
 
-        // Return early if no user or no feeds found
         if (feeds.length === 0) {
             res.setHeader("Cache-Control", "no-store");
             return res.json({
                 success: true,
                 data: feeds,
-                message: seenIds.length > 0 ? "No more feeds available" : "No feeds found"
+                message: seenIds.length > 0 ? "No more feeds available" : "No feeds found",
             });
         }
 
-        // If user not authenticated, return feeds without metadata
+        /* ================= ANON USER ================= */
         if (!userId) {
+            // Attach signed URLs for anon users too (optional)
+            const feedsWithUrls = await Promise.all(
+                feeds.map(async (feed: any) => {
+                    if (feed.note?.thumbnail) {
+                        feed.note.thumbnailUrl = await getS3SignedDownloadUrl(
+                            feed.note.thumbnail,
+                            60 * 60
+                        );
+                    }
+                    if (feed.note?.file) {
+                        feed.note.fileUrl = await getS3SignedDownloadUrl(
+                            feed.note.file,
+                            60 * 10
+                        );
+                    }
+                    return feed;
+                })
+            );
+
             res.setHeader("Cache-Control", "no-store");
-            return res.json({ success: true, data: feeds });
+            return res.json({ success: true, data: feedsWithUrls });
         }
 
-        const feedIds = feeds.map(f => f._id);
-        const noteIds = feeds.map(f => f.note?._id).filter(Boolean);
-        const authorIds = feeds.map(f => f.author?._id).filter(Boolean);
+        /* ================= USER META ================= */
+        const feedIds = feeds.map((f) => f._id);
+        const noteIds = feeds.map((f) => f.note?._id).filter(Boolean);
+        const authorIds = feeds.map((f) => f.author?._id).filter(Boolean);
 
         const [likes, saves, purchases, follows] = await Promise.all([
-            FeedLike.find({ user: userId, feed: { $in: feedIds } }).select("feed").lean(),
-            SavedFeed.find({ user: userId, feed: { $in: feedIds } }).select("feed").lean(),
-            Purchase.find({ user: userId, note: { $in: noteIds }, status: "paid" }).select("note").lean(),
-            Follow.find({ follower: userId, following: { $in: authorIds } }).select("following").lean(),
+            FeedLike.find({ user: userId, feed: { $in: feedIds } })
+                .select("feed")
+                .lean(),
+            SavedFeed.find({ user: userId, feed: { $in: feedIds } })
+                .select("feed")
+                .lean(),
+            Purchase.find({ user: userId, note: { $in: noteIds }, status: "paid" })
+                .select("note")
+                .lean(),
+            Follow.find({ follower: userId, following: { $in: authorIds } })
+                .select("following")
+                .lean(),
         ]);
 
         const likedSet = new Set(likes.map((l: any) => String(l.feed)));
@@ -135,15 +160,33 @@ export const getFeeds = async (req: Request, res: Response) => {
         const purchasedSet = new Set(purchases.map((p: any) => String(p.note)));
         const followingSet = new Set(follows.map((f: any) => String(f.following)));
 
-        const finalFeeds = feeds.map(feed => ({
+        /* ================= ATTACH S3 URLS ================= */
+        const feedsWithUrls = await Promise.all(
+            feeds.map(async (feed: any) => {
+                if (feed.note?.thumbnail) {
+                    feed.note.thumbnailUrl = await getS3SignedDownloadUrl(
+                        feed.note.thumbnail,
+                        60 * 60 // 1 hour
+                    );
+                }
+                if (feed.note?.file) {
+                    feed.note.fileUrl = await getS3SignedDownloadUrl(
+                        feed.note.file,
+                        60 * 10 // 10 minutes - short-lived for files
+                    );
+                }
+                return feed;
+            })
+        );
+
+        /* ================= FINAL SHAPE ================= */
+        const finalFeeds = feedsWithUrls.map((feed: any) => ({
             ...feed,
             likedByMe: likedSet.has(String(feed._id)),
             savedByMe: savedSet.has(String(feed._id)),
             isPurchased: purchasedSet.has(String(feed.note?._id)),
             isFollowingAuthor: followingSet.has(String(feed.author?._id)),
         }));
-
-        console.log("FINAL_FEEDS:", finalFeeds);
 
         res.setHeader("Cache-Control", "no-store");
         return res.json({ success: true, data: finalFeeds });
@@ -155,7 +198,6 @@ export const getFeeds = async (req: Request, res: Response) => {
         });
     }
 };
-
 /* ======================================================
    LIKE / UNLIKE FEED
 ====================================================== */
