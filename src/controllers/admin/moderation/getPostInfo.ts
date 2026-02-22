@@ -279,10 +279,7 @@ export const rejectNote = async (
    GET NOTE DETAILS
  */
 
-export const getNoteDetails = async (
-    req: Request,
-    res: Response
-): Promise<void> => {
+export const getNoteDetails = async (req: Request, res: Response): Promise<void> => {
     try {
         const { noteId } = req.params;
 
@@ -292,18 +289,23 @@ export const getNoteDetails = async (
         );
 
         if (!note) {
-            res.status(404).json({
-                success: false,
-                message: "Note not found",
-            });
+            res.status(404).json({ success: false, message: "Note not found" });
             return;
         }
 
-        // Import Feed model for stats
         const feedModels = require("../../../models/users/feed.models").default;
         const feedData = await feedModels.findOne({ note: noteId });
 
-        const noteDetail: AdminNoteDetail = {
+        // SIGNED URLs
+        const thumbnailUrl = note.thumbnail
+            ? await getS3SignedDownloadUrl(note.thumbnail, 60 * 60)
+            : null;
+
+        const fileUrl = note.file
+            ? await getS3SignedDownloadUrl(note.file, 60 * 10)
+            : null;
+
+        const noteDetail = {
             id: note._id.toString(),
             title: note.title,
             description: note.description,
@@ -321,17 +323,18 @@ export const getNoteDetails = async (
             price: note.price,
             views: feedData?.views || 0,
             downloads: note.downloads,
-            thumbnail: note.thumbnail,
-            file: note.file,
             shareCount: feedData?.shareCount || 0,
             likes: feedData?.likes || 0,
             commentsCount: feedData?.commentsCount || 0,
+
+            //WORKING URLS
+            thumbnail: thumbnailUrl as any,
+            file: fileUrl as any,
+
             uploadedById: note.uploadedBy._id.toString(),
             createdAt: note.createdAt.toISOString(),
             updatedAt: note.updatedAt.toISOString(),
         };
-
-        console.log("Fetched note details:", noteDetail);
 
         res.status(200).json({
             success: true,
