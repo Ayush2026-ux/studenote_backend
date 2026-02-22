@@ -6,6 +6,7 @@ import NotesUpload from "../../../models/users/NotesUpload";
 // import fetch from "node-fetch";
 import axios from "axios";
 import purchaseModel from "../../../models/payments/purchase.model";
+import { getS3SignedDownloadUrl } from "../../../services/users/uploadnots.services";
 
 //  NEW: Controller to fetch all approved notes for the Home Screen
 export const getAllNotes = async (req: Request, res: Response) => {
@@ -68,30 +69,39 @@ export const getAllNotes = async (req: Request, res: Response) => {
             NotesUpload.countDocuments(query),
         ]);
 
-        const formattedNotes = notes.map((note: any) => ({
-            id: note._id.toString(),
+        const formattedNotes = await Promise.all(
+            notes.map(async (note: any) => {
+                const thumbnailUrl = note.thumbnail
+                    ? await getS3SignedDownloadUrl(note.thumbnail, 60 * 60) // 1 hour
+                    : null;
 
-            title: note.title,
-            description: note.description,
+                return {
+                    id: note._id.toString(),
 
-            course: note.course,
-            subject: note.subject,
-            semester: note.semester || "N/A",
+                    title: note.title,
+                    description: note.description,
 
-            fileType: note.fileType,
-            price: note.price,
-            isLocked: true,
+                    course: note.course,
+                    subject: note.subject,
+                    semester: note.semester || "N/A",
 
-            thumbnail: note.thumbnail,
-            pages: note.pages ?? 1,
+                    fileType: note.fileType,
+                    price: note.price,
+                    isLocked: true,
 
-            author: note.uploadedBy?.fullName || "Unknown",
-            authorAvatar: note.uploadedBy?.avatar || null,
+                    // signed thumbnail URL
+                    thumbnail: thumbnailUrl,
 
-            rating: note.rating ?? 0,
-            createdAt: note.createdAt,
-        }));
+                    pages: note.pages ?? 1,
 
+                    author: note.uploadedBy?.fullName || "Unknown",
+                    authorAvatar: note.uploadedBy?.avatar || null,
+
+                    rating: note.rating ?? 0,
+                    createdAt: note.createdAt,
+                };
+            })
+        );
         return res.status(200).json({
             success: true,
             meta: {
@@ -116,10 +126,11 @@ interface AuthRequest extends Request {
     user?: { _id: string };
 }
 
+
 export const getNotePreview = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
-        const userId = req.user?._id; // auth middleware must set this
+        const userId = req.user?._id;
 
         const note = await NotesUpload.findById(id)
             .select("file status title")
@@ -135,10 +146,13 @@ export const getNotePreview = async (req: AuthRequest, res: Response) => {
         /* ================= CHECK PURCHASE ================= */
         const isPurchased = await purchaseModel.exists({ userId, noteId: id });
 
+        // Generate signed URL from S3 key
+        const fileUrl = await getS3SignedDownloadUrl(note.file, 60 * 5); // 5 minutes
+
         /* ======================================================
-           1️ CHECK FILE SIZE FIRST (VERY IMPORTANT)
+           1️ CHECK FILE SIZE FIRST
         ====================================================== */
-        const head = await axios.head(note.file);
+        const head = await axios.head(fileUrl);
         const fileSize = Number(head.headers["content-length"] || 0);
 
         const MAX_ALLOWED_SIZE = 30 * 1024 * 1024;
@@ -153,7 +167,7 @@ export const getNotePreview = async (req: AuthRequest, res: Response) => {
         /* ======================================================
            2️ DOWNLOAD PDF
         ====================================================== */
-        const pdfResponse = await axios.get(note.file, {
+        const pdfResponse = await axios.get(fileUrl, {
             responseType: "arraybuffer",
             timeout: 15000,
             maxContentLength: Infinity,
@@ -186,11 +200,7 @@ export const getNotePreview = async (req: AuthRequest, res: Response) => {
         }
 
         const MAX_PREVIEW_PAGES = 10;
-
-        const previewPageCount = Math.min(
-            MAX_PREVIEW_PAGES,
-            totalPages - 1
-        );
+        const previewPageCount = Math.min(MAX_PREVIEW_PAGES, totalPages - 1);
 
         const previewPdf = await PDFDocument.create();
 
