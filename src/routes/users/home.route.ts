@@ -1,11 +1,10 @@
-// src/routes/home.routes.ts
-
 import express from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import {
-    getAllNotes,
-    getNotePreview,
+  getAllNotes,
+  getNotePreview,
 } from "../../controllers/users/home/getnotesdatainhome";
+import { getPublicNotes } from "../../controllers/users/notes/getNotes.controller";
 
 const router = express.Router();
 
@@ -13,39 +12,36 @@ const router = express.Router();
    RATE LIMITERS
 =============================== */
 
-// 🔍 Notes list (search + scroll)
 const notesListLimiter = rateLimit({
-    windowMs: 60 * 1000, // 1 minute
-    max: 30,            // 30 requests/min
-    standardHeaders: true,
-    legacyHeaders: false,
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
-// 📄 PDF Preview (HEAVY)
 const previewLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 15,                 //  15 previews only
-    standardHeaders: true,
-    legacyHeaders: false,
-    keyGenerator: (req, res) => {
-        const userId = (req as any).user?._id;
-        return userId ? `user:${userId}` : ipKeyGenerator(req as any);
-    },
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const userId = (req as any).user?._id;
+    return userId ? `user:${userId}` : ipKeyGenerator(req as any);
+  },
 });
-
-
 
 /* ===============================
    ROUTES
 =============================== */
 
-// GET /api/notes?search=&page=
+// 🏠 Home feed
 router.get("/", notesListLimiter, getAllNotes);
 
-// GET /api/notes/:id/preview
+// 👁️ Preview
 router.get("/:id/preview", previewLimiter, getNotePreview);
-
-// Optional alias (same limiter)
 router.get("/:id/file", previewLimiter, getNotePreview);
+
+// 🌍 Public/Explore listing (different path to avoid clash)
+router.get("/public", notesListLimiter, getPublicNotes);
 
 export default router;
