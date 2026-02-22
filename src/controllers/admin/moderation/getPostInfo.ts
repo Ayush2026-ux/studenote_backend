@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
 import NoteUploads, { INote, COURSE_IDS, SEMESTERS, FILE_TYPES } from "../../../models/users/NotesUpload";
-import User from "../../../models/users/users.models";
 import { sendNoteRejectionEmail } from "../../../services/mail/noteRejection.mail";
 import { sendNoteApprovalEmail } from "../../../services/mail/noteApproval.mail";
+import { getS3SignedDownloadUrl } from "../../../services/users/uploadnots.services";
 
 //  ADMIN NOTE RESPONSE (For List/Moderation View)
 interface AdminNote {
@@ -75,11 +75,19 @@ export const getPostInfo = async (
         // Import Feed model for stats
         const feedModels = require("../../../models/users/feed.models").default;
 
-        // Format response with feed stats
+        //Format response with SIGNED URLs
         const formattedNotes: AdminNote[] = await Promise.all(
             notes.map(async (note: INote) => {
-                // Get feed stats for this note
                 const feedData = await feedModels.findOne({ note: note._id });
+
+                // generate signed URLs
+                const thumbnailUrl = note.thumbnail
+                    ? await getS3SignedDownloadUrl(note.thumbnail, 60 * 60) // 1 hour
+                    : null;
+
+                const fileUrl = note.file
+                    ? await getS3SignedDownloadUrl(note.file, 60 * 10) // 10 minutes
+                    : null;
 
                 return {
                     id: note._id.toString(),
@@ -102,8 +110,10 @@ export const getPostInfo = async (
                     shareCount: feedData?.shareCount || 0,
                     likes: feedData?.likes || 0,
                     commentsCount: feedData?.commentsCount || 0,
-                    thumbnail: note.thumbnail,
-                    file: note.file,
+
+                    // ✅ Admin PDF will now open
+                    thumbnail: thumbnailUrl as any,
+                    file: fileUrl as any,
                 };
             })
         );
@@ -127,15 +137,13 @@ export const getPostInfo = async (
         res.status(200).json(response);
     } catch (error: any) {
         console.error("Error fetching notes:", error);
-        const response: AdminResponse<null> = {
+        res.status(500).json({
             success: false,
             message: "Failed to fetch notes",
             error: error.message,
-        };
-        res.status(500).json(response);
+        });
     }
 };
-
 /* 
    APPROVE NOTE
  */

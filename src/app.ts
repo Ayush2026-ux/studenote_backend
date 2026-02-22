@@ -87,10 +87,10 @@ const corsOptions = {
   ],
 };
 
-// ✅ Apply globally
+//  Apply globally
 app.use(cors(corsOptions));
 
-// ✅ Preflight fix (IMPORTANT for Railway / production)
+//  Preflight fix (IMPORTANT for Railway / production)
 //app.options("*", cors(corsOptions));
 app.use(helmet());
 app.use(morgan("dev"));
