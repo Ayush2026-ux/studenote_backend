@@ -33,6 +33,7 @@ import { handlePayoutWebhook } from "./controllers/payments/payout.webhook";
 import walletRoutes from "./routes/payments/wallet.routes";
 import earningsRoutes from "./routes/admin/payments/admin.earnings.routes";
 import payotesRoutes from "./routes/admin/payments/admin.payout.routes";
+import path from "path/win32";
 
 
 
@@ -183,6 +184,10 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/wallet", walletRoutes); // For wallet-related routes
 app.use("/api/payouts", payotesRoutes); // For admin payment routes
 app.use("/api/earnings", earningsRoutes);
+
+
+app.use("/public", express.static(path.join(__dirname, "../public")));
+
 
 // Support
 app.use("/api/support", supportRoutes);
