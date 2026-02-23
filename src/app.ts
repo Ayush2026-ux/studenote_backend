@@ -34,6 +34,7 @@ import walletRoutes from "./routes/payments/wallet.routes";
 import earningsRoutes from "./routes/admin/payments/admin.earnings.routes";
 import payotesRoutes from "./routes/admin/payments/admin.payout.routes";
 import path from "path/win32";
+import pdfViewerRoute from "./routes/utils/pdfViewer.route";
 
 
 
@@ -176,7 +177,7 @@ app.use("/api/admin/support", supportAdminRoutes);
 app.use("/api/admin/analytics", dashboardRoutes);
 
 
-
+app.use("/", pdfViewerRoute);
 //app.use("/api/admin/refunds", refundAdminRoutes);
 
 // Payments (NORMAL JSON ROUTES)
