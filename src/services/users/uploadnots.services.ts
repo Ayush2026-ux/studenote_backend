@@ -7,7 +7,7 @@ import crypto from "crypto";
 /* ================= CONSTANTS ================= */
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000;
-const UPLOAD_TIMEOUT = 600000;
+const UPLOAD_TIMEOUT = 600000; // (kept for future use)
 
 /* ================= RETRY WRAPPER ================= */
 const retryUpload = async <T>(
@@ -53,7 +53,7 @@ export const uploadToS3 = async (
         Bucket: S3_BUCKET_NAME,
         Key: key,
         Body: buffer,
-        ContentType: file.mimetype, // image/jpeg or application/pdf
+        ContentType: file.mimetype || "application/octet-stream",
         CacheControl: "public, max-age=31536000",
       })
     );
@@ -63,7 +63,13 @@ export const uploadToS3 = async (
   return { key };
 };
 
-/* ================= SIGNED DOWNLOAD URL (FIXED FOR IMAGES + PDF) ================= */
+/* ================= SIGNED DOWNLOAD URL (SAFE FOR WEBVIEW + PREVIEW) ================= */
+/**
+ * NOTE:
+ * - Do NOT force ResponseContentType unless required.
+ * - For WebView + PDF preview, letting S3 serve original headers is safest.
+ * - ResponseContentDisposition: inline → opens in browser/WebView
+ */
 export const getS3SignedDownloadUrl = async (
   key: string,
   expiresInSec = 900,
@@ -75,8 +81,9 @@ export const getS3SignedDownloadUrl = async (
       Bucket: S3_BUCKET_NAME,
       Key: key,
       ResponseContentDisposition: "inline",
-      ...(contentType ? { ResponseContentType: contentType } : {}), // ✅ only set when needed
-      ResponseCacheControl: "public, max-age=1800, stale-while-revalidate=300",
+      ...(contentType ? { ResponseContentType: contentType } : {}),
+      // ⚠️ Cache-Control removed for preview stability (prevents stale signed URLs)
+      // ResponseCacheControl: "public, max-age=1800, stale-while-revalidate=300",
     }),
     { expiresIn: expiresInSec }
   );

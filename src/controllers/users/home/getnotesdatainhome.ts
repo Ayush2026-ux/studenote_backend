@@ -50,35 +50,23 @@ export const getAllNotes = async (req: Request, res: Response) => {
     const formattedNotes = await Promise.all(
       notes.map(async (note: any) => {
         const thumbnailUrl = note.thumbnail
-          ? await getS3SignedDownloadUrl(
-              note.thumbnail,
-              60 * 60,
-              "image/jpeg" // FIX: correct content-type for images
-            )
+          ? await getS3SignedDownloadUrl(note.thumbnail, 60 * 60, "image/jpeg")
           : null;
 
         return {
           id: note._id.toString(),
-
           title: note.title,
           description: note.description,
-
           course: note.course,
           subject: note.subject,
           semester: note.semester || "N/A",
-
           fileType: note.fileType,
           price: note.price,
           isLocked: true,
-
-          //  FIX: frontend expects `thumbnailUrl`
-          thumbnailUrl: thumbnailUrl,
-
+          thumbnailUrl,
           pages: note.pages ?? 1,
-
           author: note.uploadedBy?.fullName || "Unknown",
           authorAvatar: note.uploadedBy?.avatar || null,
-
           rating: note.rating ?? 0,
           createdAt: note.createdAt,
         };
@@ -111,7 +99,7 @@ export const getNotePreview = async (req: AuthRequest, res: Response) => {
     const userId = req.user?._id;
 
     const note = await NotesUpload.findById(id)
-      .select("file status title")
+      .select("file status title pages")
       .lean();
 
     if (!note || note.status !== "approved" || !note.file) {
@@ -121,53 +109,52 @@ export const getNotePreview = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const isPurchased = await purchaseModel.exists({ userId, noteId: id });
+    // ✅ FIX: correct purchase check
+    const isPurchased = await purchaseModel.exists({
+      user: userId,
+      note: id,
+      status: "paid",
+    });
 
     const fileUrl = await getS3SignedDownloadUrl(
       note.file,
-      60 * 5,
-      "application/pdf" //  FIX: correct content-type for PDFs
+      60 * 10,
+      "application/pdf"
     );
 
-    const head = await axios.head(fileUrl);
-    const fileSize = Number(head.headers["content-length"] || 0);
-
-    if (!fileSize || fileSize > 30 * 1024 * 1024) {
-      return res.status(413).json({
-        success: false,
-        message: "Preview not available for large PDF files",
-      });
+    // ✅ FIX: HEAD request can fail on S3 → don’t break preview
+    let fileSize = 0;
+    try {
+      const head = await axios.head(fileUrl, { timeout: 10000 });
+      fileSize = Number(head.headers["content-length"] || 0);
+    } catch (e) {
+      console.warn("HEAD failed, skipping size check");
     }
 
+    // ✅ FIX: increase timeout
     const pdfResponse = await axios.get(fileUrl, {
       responseType: "arraybuffer",
-      timeout: 15000,
+      timeout: 30000,
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
-      validateStatus: (s) => s === 200,
+      validateStatus: (s) => s >= 200 && s < 300,
     });
 
+    // If purchased → return full PDF
     if (isPurchased) {
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", 'inline; filename="full.pdf"');
-      res.setHeader("Accept-Ranges", "bytes");
-      res.setHeader("Content-Length", pdfResponse.data.byteLength);
       res.setHeader("Cache-Control", "no-store");
       return res.status(200).send(Buffer.from(pdfResponse.data));
     }
 
+    // Preview logic
     const originalPdf = await PDFDocument.load(pdfResponse.data);
     const totalPages = originalPdf.getPageCount();
 
-    if (totalPages <= 1) {
-      return res.status(403).json({
-        success: false,
-        message: "Preview not available for this document",
-      });
-    }
-
-    const previewPageCount = Math.min(10, totalPages - 1);
+    const previewPageCount = Math.min(10, Math.max(1, totalPages - 1));
     const previewPdf = await PDFDocument.create();
+
     const pages = await previewPdf.copyPages(
       originalPdf,
       Array.from({ length: previewPageCount }, (_, i) => i)
@@ -190,17 +177,16 @@ export const getNotePreview = async (req: AuthRequest, res: Response) => {
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", 'inline; filename="preview.pdf"');
-    res.setHeader("Accept-Ranges", "bytes");
-    res.setHeader("Content-Length", previewBytes.length);
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-    res.setHeader("Pragma", "no-cache");
-
-    res.setHeader("X-Preview-Pages", previewPageCount.toString());
-    res.setHeader("X-Total-Pages", totalPages.toString());
 
     return res.status(200).send(Buffer.from(previewBytes));
-  } catch (error) {
-    console.error("PDF PREVIEW ERROR:", error);
+  } catch (error: any) {
+    console.error("PDF PREVIEW ERROR:", {
+      message: error?.message,
+      status: error?.response?.status,
+      data: error?.response?.data,
+    });
+
     return res.status(500).json({
       success: false,
       message: "Preview failed",
