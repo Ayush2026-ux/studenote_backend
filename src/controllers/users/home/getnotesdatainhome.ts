@@ -109,7 +109,7 @@ export const getNotePreview = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // ✅ FIX: correct purchase check
+    // ✅ Correct purchase check
     const isPurchased = await purchaseModel.exists({
       user: userId,
       note: id,
@@ -122,16 +122,13 @@ export const getNotePreview = async (req: AuthRequest, res: Response) => {
       "application/pdf"
     );
 
-    // ✅ FIX: HEAD request can fail on S3 → don’t break preview
-    let fileSize = 0;
+    // HEAD optional
     try {
-      const head = await axios.head(fileUrl, { timeout: 10000 });
-      fileSize = Number(head.headers["content-length"] || 0);
-    } catch (e) {
-      console.warn("HEAD failed, skipping size check");
+      await axios.head(fileUrl, { timeout: 10000 });
+    } catch {
+      console.warn("HEAD failed, continuing without size check");
     }
 
-    // ✅ FIX: increase timeout
     const pdfResponse = await axios.get(fileUrl, {
       responseType: "arraybuffer",
       timeout: 30000,
@@ -140,11 +137,15 @@ export const getNotePreview = async (req: AuthRequest, res: Response) => {
       validateStatus: (s) => s >= 200 && s < 300,
     });
 
+    // 🔒 Headers that FORCE inline rendering (no download manager)
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'inline; filename="preview.pdf"');
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+
     // If purchased → return full PDF
     if (isPurchased) {
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", 'inline; filename="full.pdf"');
-      res.setHeader("Cache-Control", "no-store");
       return res.status(200).send(Buffer.from(pdfResponse.data));
     }
 
@@ -174,10 +175,6 @@ export const getNotePreview = async (req: AuthRequest, res: Response) => {
     });
 
     const previewBytes = await previewPdf.save();
-
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", 'inline; filename="preview.pdf"');
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
 
     return res.status(200).send(Buffer.from(previewBytes));
   } catch (error: any) {
