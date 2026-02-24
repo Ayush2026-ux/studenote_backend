@@ -120,18 +120,24 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
     );
 
     const pdfBuffer = (
-      await axios.get(fullUrl, { responseType: "arraybuffer" })
+      await axios.get(fullUrl, {
+        responseType: "arraybuffer",
+        timeout: 30000,
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      })
     ).data;
 
-    // 🔓 PURCHASED → SEND FULL PDF
+    // 🔓 PURCHASED → FULL PDF IN APP (NO DOWNLOAD MANAGER)
     if (isPurchased) {
       res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", "inline"); // 🔥 CRITICAL FIX
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
       res.setHeader("Pragma", "no-cache");
       return res.send(Buffer.from(pdfBuffer));
     }
 
-    // 🔒 NOT PURCHASED → SEND 10-PAGE PREVIEW
+    // 🔒 NOT PURCHASED → 10 PAGE PREVIEW + WATERMARK
     const original = await PDFDocument.load(pdfBuffer);
     const preview = await PDFDocument.create();
 
@@ -158,6 +164,7 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
     const bytes = await preview.save();
 
     res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", "inline"); // 🔥 CRITICAL FIX
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
