@@ -9,6 +9,7 @@ interface AuthRequest extends Request {
   user?: { _id: string; fullName?: string };
 }
 
+/* ================= PUBLIC NOTES ================= */
 export const getPublicNotes = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?._id;
@@ -19,17 +20,12 @@ export const getPublicNotes = async (req: AuthRequest, res: Response) => {
 
     const notesWithUrls = await Promise.all(
       notes.map(async (note: any) => {
-        let thumbnailUrl: string | null = null;
-        let fileUrl: string | null = null;
-        let isBought = false;
+        const thumbnailUrl = note.thumbnail
+          ? await getS3SignedDownloadUrl(note.thumbnail, 60 * 60, "image/jpeg")
+          : null;
 
-        if (note.thumbnail) {
-          thumbnailUrl = await getS3SignedDownloadUrl(
-            note.thumbnail,
-            60 * 60,
-            "image/jpeg"
-          );
-        }
+        let isBought = false;
+        let fileUrl: string | null = null;
 
         if (userId) {
           const purchase = await purchaseModel.findOne({
@@ -58,34 +54,23 @@ export const getPublicNotes = async (req: AuthRequest, res: Response) => {
       })
     );
 
-    return res.status(200).json({
-      success: true,
-      data: notesWithUrls,
-    });
-  } catch (error) {
-    console.error("GET PUBLIC NOTES ERROR:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch notes",
-    });
+    return res.json({ success: true, data: notesWithUrls });
+  } catch (e) {
+    console.error("GET PUBLIC NOTES ERROR:", e);
+    return res.status(500).json({ success: false, message: "Failed" });
   }
 };
 
-
-// 🔓 Full PDF download (only after purchase)
+/* ================= FULL PDF ================= */
 export const downloadFullNotePdf = async (req: AuthRequest, res: Response) => {
   try {
     const noteId = req.params.id;
     const userId = req.user?._id;
 
-    if (!userId) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
     const note = await NotesUpload.findById(noteId);
-    if (!note || !note.file) {
-      return res.status(404).json({ message: "Note not found" });
-    }
+    if (!note?.file) return res.status(404).json({ message: "Note not found" });
 
     const purchase = await purchaseModel.findOne({
       user: userId,
@@ -93,57 +78,48 @@ export const downloadFullNotePdf = async (req: AuthRequest, res: Response) => {
       status: "paid",
     });
 
-    if (!purchase) {
-      return res.status(403).json({
-        message: "You must purchase this note to access full PDF",
-      });
-    }
+    if (!purchase)
+      return res.status(403).json({ message: "Not purchased" });
 
-    // 🔐 Short-lived signed URL for security
-    const fullUrl = await getS3SignedDownloadUrl(
+    const fileUrl = await getS3SignedDownloadUrl(
       note.file,
-      60 * 5, // 5 minutes
+      60 * 5,
       "application/pdf"
     );
 
-    // 🔥 In-app viewer ke liye direct URL bhejo
-    return res.status(200).json({
-      success: true,
-      fileUrl: fullUrl,
-    });
-  } catch (error) {
-    console.error("FULL PDF DOWNLOAD ERROR:", error);
-    return res.status(500).json({ message: "Failed to fetch full PDF" });
+    return res.json({ success: true, fileUrl });
+  } catch (e) {
+    console.error("FULL PDF ERROR:", e);
+    return res.status(500).json({ message: "Failed to fetch PDF" });
   }
 };
 
+/* ================= PREVIEW ================= */
 export const previewNotePdf = async (req: AuthRequest, res: Response) => {
   try {
     const noteId = req.params.id;
     const userId = req.user?._id;
 
     const note = await NotesUpload.findById(noteId);
-    if (!note || !note.file) {
-      return res.status(404).json({ message: "Note not found" });
+    if (!note?.file) {
+      return res.status(404).json({ message: "No preview available" });
     }
 
+    // ❌ If already bought → block preview
     if (userId) {
-      const purchase = await purchaseModel.findOne({
+      const purchased = await purchaseModel.findOne({
         user: userId,
         note: noteId,
         status: "paid",
       });
-
-      if (purchase) {
-        return res.status(403).json({
-          message: "Already purchased. Use full file endpoint.",
-        });
+      if (purchased) {
+        return res.status(403).json({ message: "Already purchased" });
       }
     }
 
     const fullUrl = await getS3SignedDownloadUrl(
       note.file,
-      60 * 2,
+      60 * 5,
       "application/pdf"
     );
 
@@ -151,42 +127,39 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
       await axios.get(fullUrl, { responseType: "arraybuffer" })
     ).data;
 
-    const pdfDoc = await PDFDocument.load(pdfBuffer);
-    const previewDoc = await PDFDocument.create();
+    const original = await PDFDocument.load(pdfBuffer);
+    const preview = await PDFDocument.create();
 
-    const pages = pdfDoc.getPages().slice(0, 10);
-    const font = await previewDoc.embedFont(StandardFonts.HelveticaBold);
+    const font = await preview.embedFont(StandardFonts.HelveticaBold);
+    const pages = original.getPages().slice(0, 10);
 
     for (let i = 0; i < pages.length; i++) {
-      const [copiedPage] = await previewDoc.copyPages(pdfDoc, [i]);
-      const { width, height } = copiedPage.getSize();
+      const [p] = await preview.copyPages(original, [i]);
+      const { width, height } = p.getSize();
 
-      copiedPage.drawText("Preview Only • studenote", {
-        x: width / 2 - 120,
-        y: height / 2,
-        size: 22,
-        font,
+      p.drawText("Studenote • Preview Only", {
+        x: width * 0.15,
+        y: height * 0.5,
+        size: 26,
+        rotate: degrees(-30),
         color: rgb(1, 0, 0),
         opacity: 0.2,
-        rotate: degrees(-35), // ✅ FIXED
+        font,
       });
 
-      previewDoc.addPage(copiedPage);
+      preview.addPage(p);
     }
 
-    const bytes = await previewDoc.save();
+    const bytes = await preview.save();
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Cache-Control",
-      "no-store, no-cache, must-revalidate, proxy-revalidate"
-    );
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
 
     return res.send(Buffer.from(bytes));
-  } catch (error) {
-    console.error("PREVIEW PDF ERROR:", error);
-    return res.status(500).json({ message: "Failed to load preview PDF" });
+  } catch (e) {
+    console.error("PREVIEW ERROR:", e);
+    return res.status(500).json({ message: "Preview failed" });
   }
 };
