@@ -61,7 +61,7 @@ export const getPublicNotes = async (req: AuthRequest, res: Response) => {
   }
 };
 
-/* ================= FULL PDF ================= */
+/* ================= FULL PDF (OPTIONAL API) ================= */
 export const downloadFullNotePdf = async (req: AuthRequest, res: Response) => {
   try {
     const noteId = req.params.id;
@@ -94,7 +94,7 @@ export const downloadFullNotePdf = async (req: AuthRequest, res: Response) => {
   }
 };
 
-/* ================= PREVIEW ================= */
+/* ================= PREVIEW (SMART BEHAVIOUR) ================= */
 export const previewNotePdf = async (req: AuthRequest, res: Response) => {
   try {
     const noteId = req.params.id;
@@ -105,17 +105,13 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ message: "No preview available" });
     }
 
-    // ❌ If already bought → block preview
-    if (userId) {
-      const purchased = await purchaseModel.findOne({
-        user: userId,
-        note: noteId,
-        status: "paid",
-      });
-      if (purchased) {
-        return res.status(403).json({ message: "Already purchased" });
-      }
-    }
+    const isPurchased = userId
+      ? await purchaseModel.exists({
+          user: userId,
+          note: noteId,
+          status: "paid",
+        })
+      : false;
 
     const fullUrl = await getS3SignedDownloadUrl(
       note.file,
@@ -127,6 +123,15 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
       await axios.get(fullUrl, { responseType: "arraybuffer" })
     ).data;
 
+    // 🔓 PURCHASED → SEND FULL PDF
+    if (isPurchased) {
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      return res.send(Buffer.from(pdfBuffer));
+    }
+
+    // 🔒 NOT PURCHASED → SEND 10-PAGE PREVIEW
     const original = await PDFDocument.load(pdfBuffer);
     const preview = await PDFDocument.create();
 
