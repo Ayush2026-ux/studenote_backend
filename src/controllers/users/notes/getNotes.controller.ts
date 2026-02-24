@@ -54,7 +54,7 @@ export const getPublicNotes = async (req: AuthRequest, res: Response) => {
       })
     );
 
-    return res.json({ success: true, data: notesWithUrls });
+    return res.status(200).json({ success: true, data: notesWithUrls });
   } catch (e) {
     console.error("GET PUBLIC NOTES ERROR:", e);
     return res.status(500).json({ success: false, message: "Failed" });
@@ -69,7 +69,7 @@ export const downloadFullNotePdf = async (req: AuthRequest, res: Response) => {
 
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-    const note = await NotesUpload.findById(noteId);
+    const note = await NotesUpload.findById(noteId).select("file").lean();
     if (!note?.file) return res.status(404).json({ message: "Note not found" });
 
     const purchase = await purchaseModel.findOne({
@@ -78,8 +78,7 @@ export const downloadFullNotePdf = async (req: AuthRequest, res: Response) => {
       status: "paid",
     });
 
-    if (!purchase)
-      return res.status(403).json({ message: "Not purchased" });
+    if (!purchase) return res.status(403).json({ message: "Not purchased" });
 
     const fileUrl = await getS3SignedDownloadUrl(
       note.file,
@@ -87,7 +86,7 @@ export const downloadFullNotePdf = async (req: AuthRequest, res: Response) => {
       "application/pdf"
     );
 
-    return res.json({ success: true, fileUrl });
+    return res.status(200).json({ success: true, fileUrl });
   } catch (e) {
     console.error("FULL PDF ERROR:", e);
     return res.status(500).json({ message: "Failed to fetch PDF" });
@@ -100,9 +99,12 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
     const noteId = req.params.id;
     const userId = req.user?._id;
 
-    const note = await NotesUpload.findById(noteId);
+    const note = await NotesUpload.findById(noteId).select("file").lean();
     if (!note?.file) {
-      return res.status(404).json({ message: "No preview available" });
+      return res.status(404).json({
+        success: false,
+        message: "PDF file not found for this note",
+      });
     }
 
     const isPurchased = userId
@@ -113,65 +115,70 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
         })
       : false;
 
-    const fullUrl = await getS3SignedDownloadUrl(
+    // 🔐 Signed URL
+    const signedUrl = await getS3SignedDownloadUrl(
       note.file,
       60 * 5,
       "application/pdf"
     );
 
-    const pdfBuffer = (
-      await axios.get(fullUrl, {
-        responseType: "arraybuffer",
-        timeout: 30000,
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-      })
-    ).data;
+    // 🔥 Download PDF bytes from S3
+    const pdfResponse = await axios.get(signedUrl, {
+      responseType: "arraybuffer",
+      timeout: 30000,
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+      validateStatus: (s) => s >= 200 && s < 300,
+    });
 
-    // 🔓 PURCHASED → FULL PDF IN APP (NO DOWNLOAD MANAGER)
+    // 🔥 Force inline rendering (prevents Android download manager)
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'inline; filename="note.pdf"');
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+
+    // 🔓 If purchased → FULL PDF
     if (isPurchased) {
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", "inline"); // 🔥 CRITICAL FIX
-      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-      res.setHeader("Pragma", "no-cache");
-      return res.send(Buffer.from(pdfBuffer));
+      return res.status(200).send(Buffer.from(pdfResponse.data));
     }
 
-    // 🔒 NOT PURCHASED → 10 PAGE PREVIEW + WATERMARK
-    const original = await PDFDocument.load(pdfBuffer);
+    // 🔒 Not purchased → 10-page preview + watermark
+    const original = await PDFDocument.load(pdfResponse.data);
     const preview = await PDFDocument.create();
 
     const font = await preview.embedFont(StandardFonts.HelveticaBold);
-    const pages = original.getPages().slice(0, 10);
+    const totalPages = original.getPageCount();
+    const previewCount = Math.min(10, totalPages);
 
-    for (let i = 0; i < pages.length; i++) {
-      const [p] = await preview.copyPages(original, [i]);
-      const { width, height } = p.getSize();
+    const pages = await preview.copyPages(
+      original,
+      Array.from({ length: previewCount }, (_, i) => i)
+    );
 
-      p.drawText("Studenote • Preview Only", {
+    pages.forEach((page) => preview.addPage(page));
+
+    preview.getPages().forEach((page) => {
+      const { width, height } = page.getSize();
+      page.drawText("Studenote • Preview Only", {
         x: width * 0.15,
         y: height * 0.5,
-        size: 26,
+        size: 28,
         rotate: degrees(-30),
-        color: rgb(1, 0, 0),
-        opacity: 0.2,
+        color: rgb(0.85, 0.85, 0.85),
+        opacity: 0.3,
         font,
       });
+    });
 
-      preview.addPage(p);
-    }
+    const previewBytes = await preview.save();
+    return res.status(200).send(Buffer.from(previewBytes));
+  } catch (e: any) {
+    console.error("PREVIEW ERROR:", {
+      message: e?.message,
+      status: e?.response?.status,
+    });
 
-    const bytes = await preview.save();
-
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", "inline"); // 🔥 CRITICAL FIX
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-    res.setHeader("Pragma", "no-cache");
-    res.setHeader("Expires", "0");
-
-    return res.send(Buffer.from(bytes));
-  } catch (e) {
-    console.error("PREVIEW ERROR:", e);
-    return res.status(500).json({ message: "Preview failed" });
+    return res.status(500).json({ success: false, message: "Preview failed" });
   }
 };

@@ -24,7 +24,7 @@ const notesListLimiter = rateLimit({
 
 const previewLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 15,
+  max: 30, // thoda zyada, PDF heavy hota hai
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
@@ -37,16 +37,17 @@ const previewLimiter = rateLimit({
    ROUTES
 =============================== */
 
-// 🏠 Home feed
+// 🏠 Home feed (auth required)
 router.get("/", notesListLimiter, authGuard, getAllNotes);
 
-// 🌍 Public listing
+// 🌍 Public listing (NO auth, explore screen)
 router.get("/public", notesListLimiter, getPublicNotes);
 
-// 👁️ Preview (10 pages only)
-router.get("/:id/preview", previewLimiter, authGuard, previewNotePdf);
+// 👁️ Preview (works for guest + logged in)
+// ⚠️ authGuard OPTIONAL so preview works even without login
+router.get("/:id/preview", previewLimiter, previewNotePdf);
 
-// 🔓 Full PDF after purchase
+// 🔓 Full PDF after purchase (auth REQUIRED)
 router.get("/:id/file", previewLimiter, authGuard, downloadFullNotePdf);
 
 export default router;
