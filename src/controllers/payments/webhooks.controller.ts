@@ -1,3 +1,5 @@
+//webhooks.controller.ts
+
 import { Request, Response } from "express";
 import NotesUpload from "../../models/users/NotesUpload";
 import purchaseModel from "../../models/payments/purchase.model";
@@ -52,10 +54,9 @@ export const handlePaymentCaptured = async (req: Request, res: Response) => {
         await NotesUpload.updateOne({ _id: noteId }, { $inc: { downloads: 1 } });
         await feedModels.updateOne({ note: noteId }, { $inc: { score: 10 } });
 
-        // Credit creator earnings (idempotent)
-        await creditCreatorWallet(purchase._id.toString());
 
-        // If you want instant wallet credit (no T+7 wait)
+        // Instantly credit creator wallet (no T+7 wait)
+        await creditCreatorWallet(purchase._id.toString());
         await releaseEarningImmediately(purchase._id.toString());
 
         return res.json({ received: true });

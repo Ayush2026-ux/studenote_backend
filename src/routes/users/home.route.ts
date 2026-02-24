@@ -1,10 +1,13 @@
 import express from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+
+import { authGuard } from "../../middlewares/auth.middleware";
+import { getAllNotes } from "../../controllers/users/home/getnotesdatainhome";
 import {
-  getAllNotes,
-  getNotePreview,
-} from "../../controllers/users/home/getnotesdatainhome";
-import { getPublicNotes } from "../../controllers/users/notes/getNotes.controller";
+  getPublicNotes,
+  previewNotePdf,
+  downloadFullNotePdf,
+} from "../../controllers/users/notes/getNotes.controller";
 
 const router = express.Router();
 
@@ -35,13 +38,15 @@ const previewLimiter = rateLimit({
 =============================== */
 
 // 🏠 Home feed
-router.get("/", notesListLimiter, getAllNotes);
+router.get("/", notesListLimiter, authGuard, getAllNotes);
 
-// 👁️ Preview
-router.get("/:id/preview", previewLimiter, getNotePreview);
-router.get("/:id/file", previewLimiter, getNotePreview);
-
-// 🌍 Public/Explore listing (different path to avoid clash)
+// 🌍 Public listing
 router.get("/public", notesListLimiter, getPublicNotes);
+
+// 👁️ Preview (10 pages only)
+router.get("/:id/preview", previewLimiter, authGuard, previewNotePdf);
+
+// 🔓 Full PDF after purchase
+router.get("/:id/file", previewLimiter, authGuard, downloadFullNotePdf);
 
 export default router;

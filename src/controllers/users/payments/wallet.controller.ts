@@ -1,3 +1,5 @@
+//users/payments/wallet.controller.ts
+
 import { Request, Response } from "express";
 import walletModel from "../../../models/payments/wallet.model";
 import { requestPayout } from "../../../services/payments/payout.service";
