@@ -1,3 +1,4 @@
+// routes/users/home.route.ts
 import express from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 
@@ -11,10 +12,6 @@ import {
 
 const router = express.Router();
 
-/* ===============================
-   RATE LIMITERS
-=============================== */
-
 const notesListLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 30,
@@ -24,7 +21,7 @@ const notesListLimiter = rateLimit({
 
 const previewLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30, // thoda zyada, PDF heavy hota hai
+  max: 30,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
@@ -33,21 +30,16 @@ const previewLimiter = rateLimit({
   },
 });
 
-/* ===============================
-   ROUTES
-=============================== */
-
 // 🏠 Home feed (auth required)
 router.get("/", notesListLimiter, authGuard, getAllNotes);
 
-// 🌍 Public listing (NO auth, explore screen)
+// 🌍 Public explore
 router.get("/public", notesListLimiter, getPublicNotes);
 
-// 👁️ Preview (works for guest + logged in)
-// ⚠️ authGuard OPTIONAL so preview works even without login
+// 👁️ Preview (guest + logged in) → inline PDF
 router.get("/:id/preview", previewLimiter, previewNotePdf);
 
-// 🔓 Full PDF after purchase (auth REQUIRED)
+// 🔓 Full PDF (auth required)
 router.get("/:id/file", previewLimiter, authGuard, downloadFullNotePdf);
 
 export default router;

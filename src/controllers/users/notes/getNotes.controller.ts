@@ -1,3 +1,4 @@
+// controllers/users/notes/getNotes.controller.ts
 import { Request, Response } from "express";
 import NotesUpload from "../../../models/users/NotesUpload";
 import purchaseModel from "../../../models/payments/purchase.model";
@@ -61,7 +62,7 @@ export const getPublicNotes = async (req: AuthRequest, res: Response) => {
   }
 };
 
-/* ================= FULL PDF (OPTIONAL API) ================= */
+/* ================= FULL PDF ================= */
 export const downloadFullNotePdf = async (req: AuthRequest, res: Response) => {
   try {
     const noteId = req.params.id;
@@ -93,7 +94,7 @@ export const downloadFullNotePdf = async (req: AuthRequest, res: Response) => {
   }
 };
 
-/* ================= PREVIEW (SMART BEHAVIOUR) ================= */
+/* ================= PREVIEW (INLINE, SMART) ================= */
 export const previewNotePdf = async (req: AuthRequest, res: Response) => {
   try {
     const noteId = req.params.id;
@@ -115,14 +116,12 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
         })
       : false;
 
-    // 🔐 Signed URL
     const signedUrl = await getS3SignedDownloadUrl(
       note.file,
       60 * 5,
       "application/pdf"
     );
 
-    // 🔥 Download PDF bytes from S3
     const pdfResponse = await axios.get(signedUrl, {
       responseType: "arraybuffer",
       timeout: 30000,
@@ -131,19 +130,19 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
       validateStatus: (s) => s >= 200 && s < 300,
     });
 
-    // 🔥 Force inline rendering (prevents Android download manager)
+    // 🔥 FORCE INLINE VIEW (ANDROID DOWNLOAD MANAGER FIX)
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", 'inline; filename="note.pdf"');
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("X-Content-Type-Options", "nosniff");
 
-    // 🔓 If purchased → FULL PDF
+    // 🔓 Purchased → Full PDF
     if (isPurchased) {
       return res.status(200).send(Buffer.from(pdfResponse.data));
     }
 
-    // 🔒 Not purchased → 10-page preview + watermark
+    // 🔒 Not purchased → Preview (10 pages + watermark)
     const original = await PDFDocument.load(pdfResponse.data);
     const preview = await PDFDocument.create();
 
@@ -156,7 +155,7 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
       Array.from({ length: previewCount }, (_, i) => i)
     );
 
-    pages.forEach((page) => preview.addPage(page));
+    pages.forEach((p) => preview.addPage(p));
 
     preview.getPages().forEach((page) => {
       const { width, height } = page.getSize();
