@@ -100,7 +100,6 @@ const corsOptions: cors.CorsOptions = {
 // Apply CORS before routes
 app.use(cors(corsOptions));
 
-// Handle preflight explicitly
 
 //  Preflight fix (IMPORTANT for Railway / production)
 //app.options("*", cors(corsOptions));
