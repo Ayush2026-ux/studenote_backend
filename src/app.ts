@@ -65,9 +65,11 @@ app.post(
 /* ===============================
    2 GLOBAL MIDDLEWARES
 ================================ */
+
 const allowedOrigins = [
   "https://www.studenote.co.in",
   "https://studenote.co.in",
+  "https://api.studenote.co.in",   //  ADD THIS
   "http://localhost:3000",
   "http://localhost:19006", // Expo web
 ];
@@ -85,7 +87,7 @@ const corsOptions: cors.CorsOptions = {
       return callback(null, true);
     }
 
-    console.log("Blocked by CORS:", origin);
+    console.log(" Blocked by CORS:", origin);
     return callback(new Error("Not allowed by CORS"));
   },
 
@@ -107,8 +109,6 @@ const corsOptions: cors.CorsOptions = {
 
 // Apply CORS before routes
 app.use(cors(corsOptions));
-
-
 //  Preflight fix (IMPORTANT for Railway / production)
 //app.options("*", cors(corsOptions));
 app.use(helmet());
