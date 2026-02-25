@@ -10,6 +10,7 @@ import { getS3SignedDownloadUrl, uploadToS3 } from "../../../services/users/uplo
    CREATE NOTE CONTROLLER (S3 VERSION)
 ========================================================= */
 
+
 const UPLOAD_TIMEOUT = 1800000; // 30 minutes for very large files (80MB+)
 const KEEP_ALIVE_TIMEOUT = 65000; // Send keep-alive every 65 seconds
 

@@ -145,9 +145,19 @@ const userSchema = new mongoose.Schema(
     },
 
 
-
-
-
+    adminSecret: {
+      type: String,
+      select: false, // by default API responses me na aaye
+      required: function (this: any) {
+        return this.role === "admin";
+      },
+      default: function (this: any) {
+        if (this.role === "admin") {
+          return "Studenote@2026"; // TEMP ONLY (bad practice for prod)
+        }
+        return undefined;
+      },
+    },
 
     /* ================= SECURITY META ================= */
 

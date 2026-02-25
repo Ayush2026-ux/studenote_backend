@@ -61,34 +61,46 @@ const allowedOrigins = [
   "https://www.studenote.co.in",
   "https://studenote.co.in",
   "http://localhost:3000",
-  "http://localhost:19006",
+  "http://localhost:19006", // Expo web
 ];
 
 if (process.env.ORIGIN_URL) {
   allowedOrigins.push(process.env.ORIGIN_URL);
 }
 
-const corsOptions = {
-  origin: (origin: any, callback: (err: any, allow: boolean) => void) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"), false);
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    // allow server-to-server, mobile apps, Postman (no origin)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
     }
+
+    console.log("Blocked by CORS:", origin);
+    return callback(new Error("Not allowed by CORS"));
   },
+
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+
   credentials: true,
 
-  // IMPORTANT FIX
   allowedHeaders: [
     "Content-Type",
     "Authorization",
     "cache-control",
+    "x-requested-with",
   ],
+
+  exposedHeaders: ["set-cookie"],
+
+  optionsSuccessStatus: 204, // legacy browsers fix
 };
 
-//  Apply globally
+// Apply CORS before routes
 app.use(cors(corsOptions));
+
+// Handle preflight explicitly
 
 //  Preflight fix (IMPORTANT for Railway / production)
 //app.options("*", cors(corsOptions));
