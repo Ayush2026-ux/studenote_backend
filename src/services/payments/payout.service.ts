@@ -10,6 +10,7 @@ export const calculateWithdrawalFee = (amount: number) => {
     return { feePercent, feeAmount, netAmount };
 };
 
+
 export const requestPayout = async (
     userId: string,
     amount: number,
@@ -20,6 +21,11 @@ export const requestPayout = async (
     bankAccountNumber?: string,
     bankIfsc?: string
 ) => {
+    // Enforce minimum redeemable balance
+    if (amount < 100) {
+        throw new Error("Minimum redeemable amount is ₹100");
+    }
+
     const wallet = await Wallet.findOneAndUpdate(
         { user: userId, balance: { $gte: amount } },
         { $inc: { balance: -amount } },

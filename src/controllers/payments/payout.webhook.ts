@@ -1,3 +1,5 @@
+//payout.webhook.ts
+
 import { Request, Response } from "express";
 import Payout from "../../models/payments/payout.model";
 import Wallet from "../../models/payments/wallet.model";
