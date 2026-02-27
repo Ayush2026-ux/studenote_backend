@@ -4,36 +4,30 @@ import User from "../../../models/users/users.models";
 import { generateOtp } from "../../../utils/generateOtp";
 import { sendOtpMail } from "../../../services/mail/otp.mail";
 
-/* 
-   ADMIN LOGIN CONTROLLER (OTP BASED)
-   STEP 1: Email + Password → Send OTP
- */
-
 export const adminLogin = async (req: Request, res: Response) => {
     try {
-        /* SAFE BODY */
         const body = req.body || {};
 
         const email =
-            typeof body.email === "string"
-                ? body.email.toLowerCase().trim()
-                : "";
+            typeof body.email === "string" ? body.email.toLowerCase().trim() : "";
 
-        const password =
-            typeof body.password === "string"
-                ? body.password
-                : "";
+        const password = typeof body.password === "string" ? body.password : "";
+
+        const adminSecretInput =
+            typeof body.adminSecret === "string" ? body.adminSecret : "";
 
         /* BASIC VALIDATION */
-        if (!email || !password) {
+        if (!email || !password || !adminSecretInput) {
             return res.status(400).json({
                 success: false,
-                message: "Email and password are required",
+                message: "Email, password and admin secret are required",
             });
         }
 
         /* FIND ADMIN USER */
-        const admin = await User.findOne({ email, role: "admin" }).select("+password");
+        const admin = await User.findOne({ email, role: "admin" }).select(
+            "+password +adminSecret"
+        );
 
         if (!admin) {
             return res.status(404).json({
@@ -52,11 +46,18 @@ export const adminLogin = async (req: Request, res: Response) => {
 
         /* PASSWORD CHECK */
         const isMatch = await bcrypt.compare(password, admin.password);
-
         if (!isMatch) {
             return res.status(401).json({
                 success: false,
                 message: "Invalid credentials",
+            });
+        }
+
+        /* ADMIN SECRET CHECK (TEMP PLAINTEXT) */
+        if (admin.adminSecret !== adminSecretInput) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid admin secret",
             });
         }
 
@@ -76,16 +77,12 @@ export const adminLogin = async (req: Request, res: Response) => {
         const otp = String(generateOtp());
 
         admin.otp = otp;
-        admin.otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+        admin.otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
         admin.otpAttempts = 0;
         admin.lastOtpSentAt = new Date();
 
         await admin.save();
 
-        //  DEV ONLY (remove in production)
-        //console.log("ADMIN LOGIN OTP:", otp);
-
-        /* RESPONSE */
         res.status(200).json({
             success: true,
             message: "OTP sent to your email",
@@ -93,7 +90,6 @@ export const adminLogin = async (req: Request, res: Response) => {
             email: admin.email,
         });
 
-        /* SEND OTP EMAIL (ASYNC) */
         sendOtpMail(email, otp).catch((err) => {
             console.error("OTP MAIL ERROR:", err);
         });
