@@ -50,12 +50,14 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
     const noteId = req.params.id;
     const userId = req.user?._id;
 
-    if (!userId)
+    if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
+    }
 
     const note = await NotesUpload.findById(noteId).select("file").lean();
-    if (!note?.file)
+    if (!note?.file) {
       return res.status(404).json({ message: "PDF not found" });
+    }
 
     const isPurchased = await purchaseModel.exists({
       user: userId,
@@ -65,57 +67,16 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
 
     const signedUrl = await getS3SignedDownloadUrl(
       note.file,
-      60,
+      120, // longer expiry
       "application/pdf"
     );
 
-    const pdfResponse = await axios.get(signedUrl, {
-      responseType: "arraybuffer",
+    return res.json({
+      success: true,
+      url: signedUrl,
+      isPurchased: !!isPurchased,
     });
 
-    //  FORCE INLINE
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", "inline");
-    res.setHeader("Cache-Control", "no-store");
-    res.setHeader("Pragma", "no-cache");
-    res.setHeader("X-Content-Type-Options", "nosniff");
-
-    //  IF PURCHASED → FULL PDF
-    if (isPurchased) {
-      return res.send(Buffer.from(pdfResponse.data));
-    }
-
-    //  NOT PURCHASED → PREVIEW (10 PAGES + WATERMARK)
-    const original = await PDFDocument.load(pdfResponse.data);
-    const preview = await PDFDocument.create();
-
-    const font = await preview.embedFont(StandardFonts.HelveticaBold);
-    const totalPages = original.getPageCount();
-    const previewCount = Math.min(10, totalPages);
-
-    const pages = await preview.copyPages(
-      original,
-      Array.from({ length: previewCount }, (_, i) => i)
-    );
-
-    pages.forEach((p) => preview.addPage(p));
-
-    preview.getPages().forEach((page) => {
-      const { width, height } = page.getSize();
-
-      page.drawText("Studenote Preview", {
-        x: width * 0.2,
-        y: height * 0.5,
-        size: 30,
-        rotate: degrees(-30),
-        color: rgb(0.8, 0.8, 0.8),
-        opacity: 0.4,
-        font,
-      });
-    });
-
-    const previewBytes = await preview.save();
-    return res.send(Buffer.from(previewBytes));
   } catch (e) {
     console.error("PREVIEW ERROR:", e);
     return res.status(500).json({ message: "Preview failed" });
