@@ -67,16 +67,15 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
 
     const signedUrl = await getS3SignedDownloadUrl(
       note.file,
-      120, // longer expiry
+      300, // 5 min expiry
       "application/pdf"
     );
 
     return res.json({
       success: true,
-      url: signedUrl,
       isPurchased: !!isPurchased,
+      url: signedUrl,
     });
-
   } catch (e) {
     console.error("PREVIEW ERROR:", e);
     return res.status(500).json({ message: "Preview failed" });
