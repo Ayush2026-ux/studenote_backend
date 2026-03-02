@@ -2,9 +2,11 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
+import path from "path";
 
 import razorpayWebhookMiddleware from "./middlewares/razorpayWebhook.middleware";
 import { handleAllWebhooks } from "./controllers/payments/webhooks.controller";
+import { handlePayoutWebhook } from "./controllers/payments/payout.webhook";
 
 /* ROUTES */
 import authRoutes from "./routes/users/auth.routes";
@@ -27,32 +29,24 @@ import socialRoutes from "./routes/admin/social/social.route";
 import paymentRoutes from "./routes/payments/payment.routes";
 import supportAdminRoutes from "./routes/admin/support/support.routes";
 import dashboardRoutes from "./routes/admin/dashboard/dashboard.route";
-//import refundAdminRoutes from "./routes/admin/refund.routes";
 import supportRoutes from "./routes/support/support.routes";
-import { handlePayoutWebhook } from "./controllers/payments/payout.webhook";
 import walletRoutes from "./routes/payments/wallet.routes";
 import earningsRoutes from "./routes/admin/payments/admin.earnings.routes";
 import payotesRoutes from "./routes/admin/payments/admin.payout.routes";
-import path from "path/win32";
+
 import pdfViewerRoute from "./routes/utils/pdfViewer.route";
-
-
-
-
-
 
 const app = express();
 
 /* ===============================
-   1️ RAZORPAY WEBHOOK (RAW BODY)
-   MUST COME FIRST
+   1️⃣ WEBHOOKS (RAW BODY FIRST)
 ================================ */
 
 app.post(
   "/api/payments/webhook",
   express.raw({ type: "application/json" }),
   razorpayWebhookMiddleware,
-  handleAllWebhooks,
+  handleAllWebhooks
 );
 
 app.post(
@@ -63,103 +57,69 @@ app.post(
 );
 
 /* ===============================
-   2 GLOBAL MIDDLEWARES
+   2️⃣ GLOBAL MIDDLEWARES
 ================================ */
 
 const allowedOrigins = [
   "https://www.studenote.co.in",
   "https://studenote.co.in",
-  "https://api.studenote.co.in",   //  ADD THIS
+  "https://api.studenote.co.in",
   "http://localhost:3000",
-  "http://localhost:19006", // Expo web
+  "http://localhost:19006",
 ];
-
-if (process.env.ORIGIN_URL) {
-  allowedOrigins.push(process.env.ORIGIN_URL);
-}
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    // allow server-to-server, mobile apps, Postman (no origin)
     if (!origin) return callback(null, true);
-
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-
-    console.log(" Blocked by CORS:", origin);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    console.log("Blocked by CORS:", origin);
     return callback(new Error("Not allowed by CORS"));
   },
-
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-
   credentials: true,
-
   allowedHeaders: [
     "Content-Type",
     "Authorization",
     "cache-control",
     "x-requested-with",
   ],
-
-  exposedHeaders: ["set-cookie"],
-
-  optionsSuccessStatus: 204, // legacy browsers fix
 };
 
-// Apply CORS before routes
 app.use(cors(corsOptions));
-//  Preflight fix (IMPORTANT for Railway / production)
-//app.options("*", cors(corsOptions));
 app.use(helmet());
 app.use(morgan("dev"));
 
 /* ===============================
-   3 BODY PARSERS (AFTER WEBHOOK)
+   3️⃣ BODY PARSERS
 ================================ */
 
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-
 /* ===============================
-   4 TRUST PROXY
+   4️⃣ TRUST PROXY
 ================================ */
 
 app.set("trust proxy", true);
 
 /* ===============================
-   5 TIMEOUT MIDDLEWARE
-================================ */
-
-app.use((req, res, next) => {
-  if (req.path.includes("/upload")) {
-    req.setTimeout(1800000);
-    res.setTimeout(1800000);
-  }
-  next();
-});
-
-/* ===============================
-   6 HEALTH & ROOT
+   5️⃣ HEALTH
 ================================ */
 
 app.get("/", (_req, res) => {
-  res.status(200).json({
+  res.json({
     success: true,
-    message: "Studenote Backend is running 🚀",
+    message: "Studenote Backend running 🚀",
   });
 });
 
 app.get("/health", (_req, res) => {
-  res.status(200).send("OK");
+  res.send("OK");
 });
 
 /* ===============================
-   7 ROUTES
+   6️⃣ ROUTES
 ================================ */
-
-
 
 // Public
 app.use("/api", authRoutes);
@@ -187,55 +147,48 @@ app.use("/api/admin/finance", financeRoutes);
 app.use("/api/admin/support", supportAdminRoutes);
 app.use("/api/admin/analytics", dashboardRoutes);
 
-
-app.use("/", pdfViewerRoute);
-//app.use("/api/admin/refunds", refundAdminRoutes);
-
-// Payments (NORMAL JSON ROUTES)
+// Payments
 app.use("/api/payments", paymentRoutes);
-app.use("/api/wallet", walletRoutes); // For wallet-related routes
-app.use("/api/payouts", payotesRoutes); // For admin payment routes
+app.use("/api/wallet", walletRoutes);
+app.use("/api/payouts", payotesRoutes);
 app.use("/api/earnings", earningsRoutes);
-
-
-app.use("/public", express.static(path.join(__dirname, "../public")));
-
 
 // Support
 app.use("/api/support", supportRoutes);
 
-app.get("/api", (_req, res) => {
-  res.json({ message: "API running" });
-});
+/* ===============================
+   🔥 FIXED: PDF ROUTE (IMPORTANT)
+================================ */
+
+app.use("/api", pdfViewerRoute);
 
 /* ===============================
-   8 404 HANDLER
+   STATIC
+================================ */
+
+app.use("/public", express.static(path.join(__dirname, "../public")));
+
+/* ===============================
+   404 HANDLER
 ================================ */
 
 app.use((_req, res) => {
   res.status(404).json({
     success: false,
-    message: "Route not found",
+    message: "Requested resource not found.",
   });
 });
 
 /* ===============================
-   9 GLOBAL ERROR HANDLER
+   GLOBAL ERROR HANDLER
 ================================ */
 
-app.use(
-  (
-    err: any,
-    _req: express.Request,
-    res: express.Response,
-    _next: express.NextFunction
-  ) => {
-    console.error("GLOBAL ERROR:", err);
-    res.status(err.status || 500).json({
-      success: false,
-      message: err.message || "Internal Server Error",
-    });
-  }
-);
+app.use((err: any, _req: any, res: any, _next: any) => {
+  console.error("GLOBAL ERROR:", err);
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.message || "Internal Server Error",
+  });
+});
 
 export default app;
