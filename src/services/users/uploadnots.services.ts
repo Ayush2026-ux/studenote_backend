@@ -73,11 +73,11 @@ export const uploadToS3 = async (
         Key: key,
         Body: buffer,
 
-        // 🔥 Correct content type
+        // 🔥 Safe Content Type
         ContentType:
           file.mimetype || "application/octet-stream",
 
-        // Prevent PDF cache issues
+        // Prevent PDF caching issues
         CacheControl:
           file.mimetype === "application/pdf"
             ? "no-cache"
@@ -93,11 +93,10 @@ export const uploadToS3 = async (
 
 /* ================= SAFE SIGNED DOWNLOAD URL ================= */
 /**
- * 🔥 IMPORTANT:
- * - No checksum mode
- * - No forced content type
- * - Optional contentType support
- * - Android safe
+ * 🔥 CRITICAL FIX:
+ * - Prevent checksum signing
+ * - Prevent x-amz-checksum-mode
+ * - Android compatible
  */
 
 export const getS3SignedDownloadUrl = async (
@@ -114,6 +113,7 @@ export const getS3SignedDownloadUrl = async (
 
   return await getSignedUrl(s3, command, {
     expiresIn: expiresInSec,
+    signableHeaders: new Set(["host"]), // 🔥 IMPORTANT
   });
 };
 
