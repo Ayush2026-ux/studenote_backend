@@ -8,11 +8,41 @@ import {
   uploadToS3,
 } from "../../../services/users/uploadnots.services";
 
+import { exec } from "child_process";
+import { promisify } from "util";
+import path from "path";
+import os from "os";
+
+const execAsync = promisify(exec);
+
+/* ================= PDF COMPRESSION FUNCTION ================= */
+
+const compressPdf = async (inputPath: string, outputPath: string) => {
+  const isWindows = process.platform === "win32";
+
+  const gsCommand = isWindows
+    ? `"C:\\Program Files\\gs\\gs10.06.0\\bin\\gswin64c.exe"`
+    : "gs";
+
+  const command = `
+  ${gsCommand} -sDEVICE=pdfwrite
+  -dCompatibilityLevel=1.4
+  -dPDFSETTINGS=/ebook
+  -dNOPAUSE
+  -dQUIET
+  -dBATCH
+  -sOutputFile="${outputPath}"
+  "${inputPath}"
+  `;
+
+  await execAsync(command);
+};
+
 /* =========================================================
-   CREATE NOTE CONTROLLER (S3 VERSION)
+   CREATE NOTE CONTROLLER (WITH AUTO PDF COMPRESSION)
 ========================================================= */
 
-const UPLOAD_TIMEOUT = 1800000; // 30 minutes
+const UPLOAD_TIMEOUT = 1800000;
 const KEEP_ALIVE_TIMEOUT = 65000;
 
 export const createNote = async (
@@ -25,9 +55,7 @@ export const createNote = async (
   res.setHeader("Connection", "keep-alive");
   res.setHeader("Keep-Alive", `timeout=${KEEP_ALIVE_TIMEOUT / 1000}`);
 
-  if (req.socket) {
-    req.socket.setKeepAlive(true, 60000);
-  }
+  if (req.socket) req.socket.setKeepAlive(true, 60000);
 
   const heartbeatInterval = setInterval(() => {
     if (!res.writableEnded) res.write("");
@@ -35,7 +63,8 @@ export const createNote = async (
 
   try {
     /* ================= AUTH ================= */
-    if (!req.user || !req.user._id) {
+
+    if (!req.user?._id) {
       clearInterval(heartbeatInterval);
       return res.status(401).json({
         success: false,
@@ -44,10 +73,15 @@ export const createNote = async (
     }
 
     /* ================= FILE EXTRACTION ================= */
-    const filesObj = req.files as { [key: string]: Express.Multer.File[] };
+
+    const filesObj = req.files as {
+      [key: string]: Express.Multer.File[];
+    };
 
     const thumbnailFile =
-      filesObj?.thumbnail?.[0] || filesObj?.image?.[0] || filesObj?.cover?.[0];
+      filesObj?.thumbnail?.[0] ||
+      filesObj?.image?.[0] ||
+      filesObj?.cover?.[0];
 
     const pdfFile =
       filesObj?.files?.[0] ||
@@ -64,6 +98,7 @@ export const createNote = async (
     }
 
     /* ================= SIZE CHECK ================= */
+
     if (pdfFile.size > 150 * 1024 * 1024) {
       clearInterval(heartbeatInterval);
       return res.status(413).json({
@@ -72,15 +107,8 @@ export const createNote = async (
       });
     }
 
-    if (thumbnailFile.size > 10 * 1024 * 1024) {
-      clearInterval(heartbeatInterval);
-      return res.status(413).json({
-        success: false,
-        message: "Thumbnail exceeds 10 MB limit",
-      });
-    }
-
     /* ================= READ PDF ================= */
+
     let pdfBuffer: Buffer;
 
     if (pdfFile.buffer) {
@@ -96,6 +124,7 @@ export const createNote = async (
     }
 
     /* ================= VALIDATE PDF ================= */
+
     const header = pdfBuffer.toString("utf8", 0, 5);
     if (!header.startsWith("%PDF")) {
       clearInterval(heartbeatInterval);
@@ -105,19 +134,11 @@ export const createNote = async (
       });
     }
 
-    let pageCount: number;
-    try {
-      const pdfDoc = await PDFDocument.load(pdfBuffer, {
-        ignoreEncryption: true,
-      });
-      pageCount = pdfDoc.getPageCount();
-    } catch (e) {
-      clearInterval(heartbeatInterval);
-      return res.status(400).json({
-        success: false,
-        message: "Failed to parse PDF.",
-      });
-    }
+    const pdfDoc = await PDFDocument.load(pdfBuffer, {
+      ignoreEncryption: true,
+    });
+
+    const pageCount = pdfDoc.getPageCount();
 
     if (pageCount < 1 || pageCount > 500) {
       clearInterval(heartbeatInterval);
@@ -127,27 +148,44 @@ export const createNote = async (
       });
     }
 
+    /* ================= PDF COMPRESSION ================= */
+
+    const tempDir = os.tmpdir();
+    const inputPath = path.join(tempDir, `input_${Date.now()}.pdf`);
+    const outputPath = path.join(tempDir, `compressed_${Date.now()}.pdf`);
+
+    await fs.writeFile(inputPath, pdfBuffer);
+
+    await compressPdf(inputPath, outputPath);
+
+    const compressedBuffer = await fs.readFile(outputPath);
+
+    console.log(
+      `📦 Compression: ${(pdfBuffer.length / 1024 / 1024).toFixed(2)}MB → ${(compressedBuffer.length / 1024 / 1024).toFixed(2)}MB`
+    );
+
     /* ================= UPLOAD TO S3 ================= */
-    let thumbnailKey: string;
-    let pdfKey: string;
 
-    try {
-      const [thumbRes, pdfRes] = await Promise.all([
-        uploadToS3(thumbnailFile, "thumbnails", req.user._id),
-        uploadToS3(pdfFile, "notes", req.user._id),
-      ]);
+    const [thumbRes, pdfRes] = await Promise.all([
+      uploadToS3(thumbnailFile, "thumbnails", req.user._id),
+      uploadToS3(
+        {
+          ...pdfFile,
+          buffer: compressedBuffer,
+          size: compressedBuffer.length,
+        } as any,
+        "notes",
+        req.user._id
+      ),
+    ]);
 
-      thumbnailKey = thumbRes.key;
-      pdfKey = pdfRes.key;
-    } catch (e: any) {
-      clearInterval(heartbeatInterval);
-      return res.status(502).json({
-        success: false,
-        message: e?.message || "Failed to upload files to S3",
-      });
-    }
+    /* ================= CLEAN TEMP ================= */
+
+    await fs.unlink(inputPath).catch(() => {});
+    await fs.unlink(outputPath).catch(() => {});
 
     /* ================= SAVE ================= */
+
     const noteData = {
       title: String(req.body.title || "").trim(),
       description: String(req.body.description || "").trim(),
@@ -157,32 +195,30 @@ export const createNote = async (
       fileType: String(req.body.fileType),
       price: Number(req.body.price),
       pages: pageCount,
-      thumbnail: thumbnailKey,
-      file: pdfKey,
+      thumbnail: thumbRes.key,
+      file: pdfRes.key,
       university: req.body.university?.trim() || undefined,
       uploadedBy: req.user._id,
     };
 
     const validatedData = createNoteSchema.parse(noteData);
 
-    const newNote = await NotesUpload.create({
-      ...validatedData,
-      uploadedBy: req.user._id,
-    });
+    const newNote = await NotesUpload.create(validatedData);
 
     clearInterval(heartbeatInterval);
 
-    /* ================= RETURN SIGNED URLS ================= */
+    /* ================= RETURN URLS ================= */
+
     const thumbnailUrl = await getS3SignedDownloadUrl(
-      thumbnailKey,
+      thumbRes.key,
       60 * 60,
-      "image/jpeg" 
+      "image/jpeg"
     );
 
     const pdfUrl = await getS3SignedDownloadUrl(
-      pdfKey,
+      pdfRes.key,
       60 * 10,
-      "application/pdf" 
+      "application/pdf"
     );
 
     return res.status(201).json({
@@ -197,15 +233,9 @@ export const createNote = async (
   } catch (error: any) {
     clearInterval(heartbeatInterval);
 
-    if (error.name === "ZodError") {
-      return res.status(400).json({
-        success: false,
-        message: "Validation error",
-        errors: error.errors,
-      });
-    }
+    console.error("UPLOAD ERROR:", error);
 
-    return res.status(400).json({
+    return res.status(500).json({
       success: false,
       message: error?.message || "Upload failed",
     });
