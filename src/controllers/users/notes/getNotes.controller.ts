@@ -4,6 +4,8 @@ import purchaseModel from "../../../models/payments/purchase.model";
 import { getS3SignedDownloadUrl } from "../../../services/users/uploadnots.services";
 import axios from "axios";
 import { PDFDocument, rgb, StandardFonts, degrees } from "pdf-lib";
+import { GetObjectCommand } from "@aws-sdk/client-s3"; // ❌ removed S3 class
+import { s3, S3_BUCKET_NAME } from "../../../config/s3";
 
 interface AuthRequest extends Request {
   user?: { _id: string; fullName?: string };
@@ -32,7 +34,7 @@ export const getPublicNotes = async (req: AuthRequest, res: Response) => {
           ...note,
           id: note._id.toString(),
           isBought: !!isBought,
-          fileUrl: null, //  NEVER SEND FILE URL
+          fileUrl: null, // NEVER SEND FILE URL
         };
       })
     );
@@ -44,40 +46,60 @@ export const getPublicNotes = async (req: AuthRequest, res: Response) => {
   }
 };
 
-/* ================= SECURE PREVIEW + FULL STREAM ================= */
+/* ================= PREVIEW NOTE PDF (BUYERS ONLY) ================= */
+
 export const previewNotePdf = async (req: AuthRequest, res: Response) => {
   try {
     const noteId = req.params.id;
     const userId = req.user?._id;
 
+    // 1️⃣ Unauthorized check
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const note = await NotesUpload.findById(noteId).select("file").lean();
-    if (!note?.file) {
-      return res.status(404).json({ message: "PDF not found" });
-    }
-
-    const isPurchased = await purchaseModel.exists({
+    // 2️⃣ Purchase check (IMPORTANT)
+    const hasPurchased = await purchaseModel.exists({
       user: userId,
       note: noteId,
       status: "paid",
     });
 
-    const signedUrl = await getS3SignedDownloadUrl(
-      note.file,
-      300, // 5 min expiry
-      "application/pdf"
-    );
+    if (!hasPurchased) {
+      return res.status(403).json({ message: "You have not purchased this note" });
+    }
 
-    return res.json({
-      success: true,
-      isPurchased: !!isPurchased,
-      url: signedUrl,
+    // 3️⃣ Find note file
+    const note = await NotesUpload.findById(noteId)
+      .select("file")
+      .lean();
+
+    if (!note?.file) {
+      return res.status(404).json({ message: "PDF not found" });
+    }
+
+    //  Get file from S3
+    const command = new GetObjectCommand({
+      Bucket: S3_BUCKET_NAME,
+      Key: note.file,
     });
-  } catch (e) {
-    console.error("PREVIEW ERROR:", e);
-    return res.status(500).json({ message: "Preview failed" });
+
+    const data = await s3.send(command);
+
+    if (!data.Body) {
+      return res.status(500).json({ message: "File stream missing" });
+    }
+
+    //  Headers for browser preview
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", "inline");
+    res.setHeader("Cache-Control", "no-store");
+
+    // Stream PDF
+    (data.Body as any).pipe(res);
+
+  } catch (err) {
+    console.error("STREAM ERROR:", err);
+    res.status(500).json({ message: "Preview failed" });
   }
 };

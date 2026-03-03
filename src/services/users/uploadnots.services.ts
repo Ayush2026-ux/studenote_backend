@@ -73,7 +73,7 @@ export const uploadToS3 = async (
         Key: key,
         Body: buffer,
 
-        // 🔥 Safe Content Type
+        // Safe Content Type
         ContentType:
           file.mimetype || "application/octet-stream",
 
@@ -93,7 +93,7 @@ export const uploadToS3 = async (
 
 /* ================= SAFE SIGNED DOWNLOAD URL ================= */
 /**
- * 🔥 CRITICAL FIX:
+ *  CRITICAL FIX:
  * - Prevent checksum signing
  * - Prevent x-amz-checksum-mode
  * - Android compatible
