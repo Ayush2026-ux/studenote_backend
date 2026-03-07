@@ -1,4 +1,5 @@
 // routes/users/home.route.ts
+
 import express from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 
@@ -7,10 +8,11 @@ import { getAllNotes } from "../../controllers/users/home/getnotesdatainhome";
 import {
   getPublicNotes,
   previewNotePdf,
-  downloadFullNotePdf,
 } from "../../controllers/users/notes/getNotes.controller";
 
 const router = express.Router();
+
+/* ================= RATE LIMITERS ================= */
 
 const notesListLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -30,16 +32,17 @@ const previewLimiter = rateLimit({
   },
 });
 
-// 🏠 Home feed (auth required)
+/* ================= ROUTES ================= */
+
+//  Home feed (auth required)
 router.get("/", notesListLimiter, authGuard, getAllNotes);
 
-// 🌍 Public explore
+//  Public explore (no file URLs exposed)
 router.get("/public", notesListLimiter, getPublicNotes);
 
-// 👁️ Preview (guest + logged in) → inline PDF
-router.get("/:id/preview", previewLimiter, previewNotePdf);
-
-// 🔓 Full PDF (auth required)
-router.get("/:id/file", previewLimiter, authGuard, downloadFullNotePdf);
+//  Secure Preview + Full Stream (single endpoint only)
+// Bought → full PDF
+// Not bought → 10 page watermarked preview
+router.get("/:id/preview", previewLimiter, authGuard, previewNotePdf);
 
 export default router;

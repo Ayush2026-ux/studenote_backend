@@ -1,16 +1,17 @@
-// controllers/users/notes/getNotes.controller.ts
 import { Request, Response } from "express";
 import NotesUpload from "../../../models/users/NotesUpload";
 import purchaseModel from "../../../models/payments/purchase.model";
-import { getS3SignedDownloadUrl } from "../../../services/users/uploadnots.services";
-import axios from "axios";
-import { PDFDocument, rgb, StandardFonts, degrees } from "pdf-lib";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { s3, S3_BUCKET_NAME } from "../../../config/s3";
+import { PDFDocument } from "pdf-lib";
 
 interface AuthRequest extends Request {
   user?: { _id: string; fullName?: string };
 }
 
 /* ================= PUBLIC NOTES ================= */
+
 export const getPublicNotes = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?._id;
@@ -19,102 +20,81 @@ export const getPublicNotes = async (req: AuthRequest, res: Response) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    const notesWithUrls = await Promise.all(
+    const notesWithStatus = await Promise.all(
       notes.map(async (note: any) => {
-        const thumbnailUrl = note.thumbnail
-          ? await getS3SignedDownloadUrl(note.thumbnail, 60 * 60, "image/jpeg")
-          : null;
-
-        let isBought = false;
-        let fileUrl: string | null = null;
-
-        if (userId) {
-          const purchase = await purchaseModel.findOne({
-            user: userId,
-            note: note._id,
-            status: "paid",
-          });
-          isBought = !!purchase;
-        }
-
-        if (note.file && isBought) {
-          fileUrl = await getS3SignedDownloadUrl(
-            note.file,
-            60 * 5,
-            "application/pdf"
-          );
-        }
+        const isBought = userId
+          ? await purchaseModel.exists({
+              user: userId,
+              note: note._id,
+              status: "paid",
+            })
+          : false;
 
         return {
           ...note,
           id: note._id.toString(),
-          thumbnailUrl,
-          fileUrl,
-          isBought,
+          isBought: !!isBought,
+          fileUrl: null,
         };
       })
     );
 
-    return res.status(200).json({ success: true, data: notesWithUrls });
+    return res.status(200).json({
+      success: true,
+      data: notesWithStatus,
+    });
   } catch (e) {
     console.error("GET PUBLIC NOTES ERROR:", e);
-    return res.status(500).json({ success: false, message: "Failed" });
+    return res.status(500).json({ success: false });
   }
 };
 
-/* ================= FULL PDF ================= */
-export const downloadFullNotePdf = async (req: AuthRequest, res: Response) => {
+/* ================= PREVIEW NOTE PDF ================= */
+
+export const previewNotePdf = async (req: AuthRequest, res: Response) => {
   try {
+    console.log("---- PDF PREVIEW START ----");
+
     const noteId = req.params.id;
     const userId = req.user?._id;
 
-    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    console.log("NOTE ID:", noteId);
+    console.log("USER ID:", userId);
 
-    const note = await NotesUpload.findById(noteId).select("file").lean();
-    if (!note?.file) return res.status(404).json({ message: "Note not found" });
+    if (!userId) {
+      console.log("AUTH FAILED: req.user missing");
+      return res.status(401).json({ message: "Unauthorized" });
+    }
 
-    const purchase = await purchaseModel.findOne({
+    const hasPurchased = await purchaseModel.exists({
       user: userId,
       note: noteId,
       status: "paid",
     });
 
-    if (!purchase) return res.status(403).json({ message: "Not purchased" });
+    console.log("HAS PURCHASED:", hasPurchased);
 
-    const fileUrl = await getS3SignedDownloadUrl(
-      note.file,
-      60 * 5,
-      "application/pdf"
-    );
-
-    return res.status(200).json({ success: true, fileUrl });
-  } catch (e) {
-    console.error("FULL PDF ERROR:", e);
-    return res.status(500).json({ message: "Failed to fetch PDF" });
-  }
-};
-
-/* ================= PREVIEW (INLINE, SMART) ================= */
-export const previewNotePdf = async (req: AuthRequest, res: Response) => {
-  try {
-    const noteId = req.params.id;
-    const userId = req.user?._id;
-
-    const note = await NotesUpload.findById(noteId).select("file").lean();
-    if (!note?.file) {
-      return res.status(404).json({
-        success: false,
-        message: "PDF file not found for this note",
+    if (!hasPurchased) {
+      console.log("PURCHASE CHECK FAILED");
+      return res.status(403).json({
+        message: "You have not purchased this note",
       });
     }
 
-    const isPurchased = userId
-      ? await purchaseModel.exists({
-          user: userId,
-          note: noteId,
-          status: "paid",
-        })
-      : false;
+    const note = await NotesUpload.findById(noteId)
+      .select("file")
+      .lean();
+
+    console.log("NOTE DB RESULT:", note);
+
+    if (!note?.file) {
+      console.log("FILE NOT FOUND IN DB");
+      return res.status(404).json({
+        message: "PDF not found",
+      });
+    }
+
+    console.log("S3 FILE KEY:", note.file);
 
     const signedUrl = await getS3SignedDownloadUrl(
       note.file,
@@ -130,54 +110,40 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
       validateStatus: (s) => s >= 200 && s < 300,
     });
 
-    //  FORCE INLINE VIEW (ANDROID DOWNLOAD MANAGER FIX)
+    // 🔥 FORCE INLINE VIEW (ANDROID DOWNLOAD MANAGER FIX)
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", 'inline; filename="note.pdf"');
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("X-Content-Type-Options", "nosniff");
 
-    // Purchased → Full PDF
+    // 🔓 Purchased → Full PDF
     if (isPurchased) {
       return res.status(200).send(Buffer.from(pdfResponse.data));
     }
 
-    // Not purchased → Preview (10 pages + watermark)
+    // 🔒 Not purchased → Preview (10 pages + watermark)
     const original = await PDFDocument.load(pdfResponse.data);
     const preview = await PDFDocument.create();
 
-    const font = await preview.embedFont(StandardFonts.HelveticaBold);
-    const totalPages = original.getPageCount();
-    const previewCount = Math.min(10, totalPages);
-
-    const pages = await preview.copyPages(
-      original,
-      Array.from({ length: previewCount }, (_, i) => i)
-    );
-
-    pages.forEach((p) => preview.addPage(p));
-
-    preview.getPages().forEach((page) => {
-      const { width, height } = page.getSize();
-      page.drawText("Studenote • Preview Only", {
-        x: width * 0.15,
-        y: height * 0.5,
-        size: 28,
-        rotate: degrees(-30),
-        color: rgb(0.85, 0.85, 0.85),
-        opacity: 0.3,
-        font,
-      });
+    const signedUrl = await getSignedUrl(s3, command, {
+      expiresIn: 900,
     });
 
-    const previewBytes = await preview.save();
-    return res.status(200).send(Buffer.from(previewBytes));
-  } catch (e: any) {
-    console.error("PREVIEW ERROR:", {
-      message: e?.message,
-      status: e?.response?.status,
+    console.log("SIGNED URL GENERATED");
+
+    return res.json({
+      success: true,
+      url: signedUrl,
     });
 
-    return res.status(500).json({ success: false, message: "Preview failed" });
+  } catch (err) {
+    console.error("---- PREVIEW ERROR ----");
+    console.error(err);
+
+    return res.status(500).json({
+      message: "Preview failed",
+      error: err,
+    });
   }
 };
