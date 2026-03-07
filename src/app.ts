@@ -9,6 +9,7 @@ import { handleAllWebhooks } from "./controllers/payments/webhooks.controller";
 import { handlePayoutWebhook } from "./controllers/payments/payout.webhook";
 
 /* ROUTES */
+
 import authRoutes from "./routes/users/auth.routes";
 import uploadRoutes from "./routes/users/upload.routes";
 import home from "./routes/users/home.route";
@@ -60,32 +61,19 @@ app.post(
    2️⃣ GLOBAL MIDDLEWARES
 ================================ */
 
-const allowedOrigins = [
-  "https://www.studenote.co.in",
-  "https://studenote.co.in",
-  "https://api.studenote.co.in",
-  "http://localhost:3000",
-  "http://localhost:19006",
-];
+/*
+  ⭐ IMPORTANT FIX
+  React Native / Expo requests do not send normal origin.
+  Allow all origins safely for API usage.
+*/
 
-const corsOptions: cors.CorsOptions = {
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    console.log("Blocked by CORS:", origin);
-    return callback(new Error("Not allowed by CORS"));
-  },
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  credentials: true,
-  allowedHeaders: [
-    "Content-Type",
-    "Authorization",
-    "cache-control",
-    "x-requested-with",
-  ],
-};
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+  })
+);
 
-app.use(cors(corsOptions));
 app.use(helmet());
 app.use(morgan("dev"));
 
@@ -103,7 +91,7 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.set("trust proxy", true);
 
 /* ===============================
-   5️⃣ HEALTH
+   5️⃣ HEALTH CHECK
 ================================ */
 
 app.get("/", (_req, res) => {
@@ -157,13 +145,13 @@ app.use("/api/earnings", earningsRoutes);
 app.use("/api/support", supportRoutes);
 
 /* ===============================
-   🔥 FIXED: PDF ROUTE (IMPORTANT)
+   PDF PREVIEW ROUTE
 ================================ */
 
 app.use("/api", pdfViewerRoute);
 
 /* ===============================
-   STATIC
+   STATIC FILES
 ================================ */
 
 app.use("/public", express.static(path.join(__dirname, "../public")));
@@ -185,6 +173,7 @@ app.use((_req, res) => {
 
 app.use((err: any, _req: any, res: any, _next: any) => {
   console.error("GLOBAL ERROR:", err);
+
   res.status(err.status || 500).json({
     success: false,
     message: err.message || "Internal Server Error",
