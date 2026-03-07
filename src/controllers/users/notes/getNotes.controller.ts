@@ -52,16 +52,16 @@ export const getPublicNotes = async (req: AuthRequest, res: Response) => {
 
 export const previewNotePdf = async (req: AuthRequest, res: Response) => {
   try {
-    console.log("---- PDF PREVIEW START ----");
+    //console.log("---- PDF PREVIEW START ----");
 
     const noteId = req.params.id;
     const userId = req.user?._id;
 
-    console.log("NOTE ID:", noteId);
-    console.log("USER ID:", userId);
+    //console.log("NOTE ID:", noteId);
+    //console.log("USER ID:", userId);
 
     if (!userId) {
-      console.log("AUTH FAILED: req.user missing");
+     // console.log("AUTH FAILED: req.user missing");
       return res.status(401).json({ message: "Unauthorized" });
     }
 
@@ -71,10 +71,10 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
       status: "paid",
     });
 
-    console.log("HAS PURCHASED:", hasPurchased);
+   // console.log("HAS PURCHASED:", hasPurchased);
 
     if (!hasPurchased) {
-      console.log("PURCHASE CHECK FAILED");
+     // console.log("PURCHASE CHECK FAILED");
       return res.status(403).json({
         message: "You have not purchased this note",
       });
@@ -84,16 +84,16 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
       .select("file")
       .lean();
 
-    console.log("NOTE DB RESULT:", note);
+    //console.log("NOTE DB RESULT:", note);
 
     if (!note?.file) {
-      console.log("FILE NOT FOUND IN DB");
+      //console.log("FILE NOT FOUND IN DB");
       return res.status(404).json({
         message: "PDF not found",
       });
     }
 
-    console.log("S3 FILE KEY:", note.file);
+  //  console.log("S3 FILE KEY:", note.file);
 
     const signedUrl = await getS3SignedDownloadUrl(
       note.file,
@@ -132,7 +132,7 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
     return res.status(200).send(Buffer.from(previewBytes));
 
   } catch (err) {
-    console.error("---- PREVIEW ERROR ----");
+   // console.error("---- PREVIEW ERROR ----");
     console.error(err);
 
     return res.status(500).json({
