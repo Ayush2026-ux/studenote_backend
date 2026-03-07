@@ -1,10 +1,7 @@
 import { Request, Response } from "express";
 import NotesUpload from "../../../models/users/NotesUpload";
 import purchaseModel from "../../../models/payments/purchase.model";
-import { getS3SignedDownloadUrl } from "../../../services/users/uploadnots.services";
-import axios from "axios";
-import { PDFDocument, rgb, StandardFonts, degrees } from "pdf-lib";
-import { GetObjectCommand } from "@aws-sdk/client-s3"; // ❌ removed S3 class
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { s3, S3_BUCKET_NAME } from "../../../config/s3";
 
 interface AuthRequest extends Request {
@@ -12,6 +9,7 @@ interface AuthRequest extends Request {
 }
 
 /* ================= PUBLIC NOTES ================= */
+
 export const getPublicNotes = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?._id;
@@ -34,31 +32,38 @@ export const getPublicNotes = async (req: AuthRequest, res: Response) => {
           ...note,
           id: note._id.toString(),
           isBought: !!isBought,
-          fileUrl: null, // NEVER SEND FILE URL
+          fileUrl: null,
         };
       })
     );
 
-    return res.status(200).json({ success: true, data: notesWithStatus });
+    return res.status(200).json({
+      success: true,
+      data: notesWithStatus,
+    });
   } catch (e) {
     console.error("GET PUBLIC NOTES ERROR:", e);
     return res.status(500).json({ success: false });
   }
 };
 
-/* ================= PREVIEW NOTE PDF (BUYERS ONLY) ================= */
+/* ================= PREVIEW NOTE PDF ================= */
 
 export const previewNotePdf = async (req: AuthRequest, res: Response) => {
   try {
     const noteId = req.params.id;
     const userId = req.user?._id;
 
-    // 1️⃣ Unauthorized check
+    /* ---------- 1️⃣ Auth check ---------- */
+
     if (!userId) {
-      return res.status(401).json({ message: "Unauthorized" });
+      return res.status(401).json({
+        message: "Unauthorized",
+      });
     }
 
-    // 2️⃣ Purchase check (IMPORTANT)
+    /* ---------- 2️⃣ Purchase check ---------- */
+
     const hasPurchased = await purchaseModel.exists({
       user: userId,
       note: noteId,
@@ -66,19 +71,25 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
     });
 
     if (!hasPurchased) {
-      return res.status(403).json({ message: "You have not purchased this note" });
+      return res.status(403).json({
+        message: "You have not purchased this note",
+      });
     }
 
-    // 3️⃣ Find note file
+    /* ---------- 3️⃣ Find file ---------- */
+
     const note = await NotesUpload.findById(noteId)
       .select("file")
       .lean();
 
     if (!note?.file) {
-      return res.status(404).json({ message: "PDF not found" });
+      return res.status(404).json({
+        message: "PDF not found",
+      });
     }
 
-    //  Get file from S3
+    /* ---------- 4️⃣ Get file from S3 ---------- */
+
     const command = new GetObjectCommand({
       Bucket: S3_BUCKET_NAME,
       Key: note.file,
@@ -87,19 +98,40 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
     const data = await s3.send(command);
 
     if (!data.Body) {
-      return res.status(500).json({ message: "File stream missing" });
+      return res.status(500).json({
+        message: "File stream missing",
+      });
     }
 
-    //  Headers for browser preview
+    /* ---------- 5️⃣ Important headers ---------- */
+
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", "inline");
     res.setHeader("Cache-Control", "no-store");
 
-    // Stream PDF
-    (data.Body as any).pipe(res);
+    // ⭐ REQUIRED FOR LARGE PDF STREAMING
+    res.setHeader("Accept-Ranges", "bytes");
+
+    if (data.ContentLength) {
+      res.setHeader("Content-Length", data.ContentLength.toString());
+    }
+
+    /* ---------- 6️⃣ Stream PDF ---------- */
+
+    const stream = data.Body as any;
+
+    stream.on("error", (err: any) => {
+      console.error("STREAM ERROR:", err);
+      res.end();
+    });
+
+    stream.pipe(res);
 
   } catch (err) {
-    console.error("STREAM ERROR:", err);
-    res.status(500).json({ message: "Preview failed" });
+    console.error("PREVIEW ERROR:", err);
+
+    res.status(500).json({
+      message: "Preview failed",
+    });
   }
 };
