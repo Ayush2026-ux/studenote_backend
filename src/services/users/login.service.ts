@@ -11,35 +11,35 @@ export const loginUser = async (email: string, password: string) => {
     "+password +isActive +provider"
   );
 
-  // ❌ user not found
+  //  user not found
   if (!user) {
     throw new Error("Invalid email or password");
   }
 
-  // ❌ google user trying password login
+  //  google user trying password login
   if (user.provider === "google") {
     throw new Error("Please login using Google");
   }
 
-  // ❌ inactive account
+  //  inactive account
   if (!user.isActive) {
     throw new Error("Account is disabled");
   }
 
-  // 🔐 password compare (MODEL HASHED IT)
+  //  password compare (MODEL HASHED IT)
   const isMatch = await bcrypt.compare(password, user.password as string);
 
   if (!isMatch) {
     throw new Error("Invalid email or password");
   }
 
-  // 🔑 generate tokens
+  //  generate tokens
   const payload = { userId: user._id.toString() };
 
   const accessToken = generateAccessToken(payload);
   const refreshToken = generateRefreshToken(payload);
 
-  // 💾 save refresh token in DB
+  //  save refresh token in DB
   user.refreshToken = refreshToken;
   user.refreshTokenExpiry = new Date(
     Date.now() + 365 * 24 * 60 * 60 * 1000 // 1 year
@@ -47,7 +47,7 @@ export const loginUser = async (email: string, password: string) => {
 
   await user.save();
 
-  // ✅ final response
+  // final response
   return {
     accessToken,
     refreshToken,
