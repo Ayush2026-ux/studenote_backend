@@ -1,9 +1,9 @@
 import { Request, Response } from "express";
+import axios from "axios";
 import NotesUpload from "../../../models/users/NotesUpload";
 import purchaseModel from "../../../models/payments/purchase.model";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { s3, S3_BUCKET_NAME } from "../../../config/s3";
+import { PDFDocument } from "pdf-lib";
+import { getS3SignedDownloadUrl } from "../../../services/users/uploadnots.services";
 
 interface AuthRequest extends Request {
   user?: { _id: string; fullName?: string };
@@ -23,10 +23,10 @@ export const getPublicNotes = async (req: AuthRequest, res: Response) => {
       notes.map(async (note: any) => {
         const isBought = userId
           ? await purchaseModel.exists({
-              user: userId,
-              note: note._id,
-              status: "paid",
-            })
+            user: userId,
+            note: note._id,
+            status: "paid",
+          })
           : false;
 
         return {
@@ -95,25 +95,41 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
 
     console.log("S3 FILE KEY:", note.file);
 
-    const command = new GetObjectCommand({
-      Bucket: S3_BUCKET_NAME,
-      Key: note.file,
-      ResponseContentDisposition: "inline",
-      ResponseContentType: "application/pdf",
+    const signedUrl = await getS3SignedDownloadUrl(
+      note.file,
+      60 * 5,
+      "application/pdf"
+    );
+
+    const pdfResponse = await axios.get(signedUrl, {
+      responseType: "arraybuffer",
+      timeout: 30000,
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+      validateStatus: (s: number) => s >= 200 && s < 300,
     });
 
-    console.log("S3 COMMAND CREATED");
+    // 🔥 FORCE INLINE VIEW (ANDROID DOWNLOAD MANAGER FIX)
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'inline; filename="note.pdf"');
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("X-Content-Type-Options", "nosniff");
 
-    const signedUrl = await getSignedUrl(s3, command, {
-      expiresIn: 900,
-    });
+    // 🔓 Purchased → Full PDF
+    if (hasPurchased) {
+      return res.status(200).send(Buffer.from(pdfResponse.data));
+    }
 
-    console.log("SIGNED URL GENERATED");
+    // 🔒 Not purchased → Preview (10 pages)
+    const original = await PDFDocument.load(pdfResponse.data);
+    const preview = await PDFDocument.create();
+    const pageCount = Math.min(10, original.getPageCount());
+    const pages = await preview.copyPages(original, Array.from({ length: pageCount }, (_, i) => i));
+    pages.forEach((page) => preview.addPage(page));
+    const previewBytes = await preview.save();
 
-    return res.json({
-      success: true,
-      url: signedUrl,
-    });
+    return res.status(200).send(Buffer.from(previewBytes));
 
   } catch (err) {
     console.error("---- PREVIEW ERROR ----");
