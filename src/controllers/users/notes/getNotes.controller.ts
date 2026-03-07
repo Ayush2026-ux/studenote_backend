@@ -52,16 +52,18 @@ export const getPublicNotes = async (req: AuthRequest, res: Response) => {
 
 export const previewNotePdf = async (req: AuthRequest, res: Response) => {
   try {
+    console.log("---- PDF PREVIEW START ----");
+
     const noteId = req.params.id;
     const userId = req.user?._id;
 
-    /* ---------- Auth check ---------- */
+    console.log("NOTE ID:", noteId);
+    console.log("USER ID:", userId);
 
     if (!userId) {
+      console.log("AUTH FAILED: req.user missing");
       return res.status(401).json({ message: "Unauthorized" });
     }
-
-    /* ---------- Purchase check ---------- */
 
     const hasPurchased = await purchaseModel.exists({
       user: userId,
@@ -69,25 +71,29 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
       status: "paid",
     });
 
+    console.log("HAS PURCHASED:", hasPurchased);
+
     if (!hasPurchased) {
+      console.log("PURCHASE CHECK FAILED");
       return res.status(403).json({
         message: "You have not purchased this note",
       });
     }
 
-    /* ---------- Find file ---------- */
-
     const note = await NotesUpload.findById(noteId)
       .select("file")
       .lean();
 
+    console.log("NOTE DB RESULT:", note);
+
     if (!note?.file) {
+      console.log("FILE NOT FOUND IN DB");
       return res.status(404).json({
         message: "PDF not found",
       });
     }
 
-    /* ---------- Generate Signed URL ---------- */
+    console.log("S3 FILE KEY:", note.file);
 
     const command = new GetObjectCommand({
       Bucket: S3_BUCKET_NAME,
@@ -96,21 +102,26 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
       ResponseContentType: "application/pdf",
     });
 
+    console.log("S3 COMMAND CREATED");
+
     const signedUrl = await getSignedUrl(s3, command, {
-      expiresIn: 60, // seconds
+      expiresIn: 900,
     });
 
-    /* ---------- Send URL ---------- */
+    console.log("SIGNED URL GENERATED");
 
     return res.json({
+      success: true,
       url: signedUrl,
     });
 
   } catch (err) {
-    console.error("PREVIEW ERROR:", err);
+    console.error("---- PREVIEW ERROR ----");
+    console.error(err);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Preview failed",
+      error: err,
     });
   }
 };
