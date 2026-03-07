@@ -1,3 +1,5 @@
+
+
 import { Request, Response } from "express";
 import { PDFDocument } from "pdf-lib";
 import { createNoteSchema } from "../../../validators/note.zod";
@@ -162,11 +164,9 @@ export const createNote = async (
       "application/pdf"
     );
 
-    /* ================= SUCCESS RESPONSE ================= */
-
     return res.status(201).json({
       success: true,
-      message: "Notes uploaded successfully.",
+      message: "Notes uploaded successfully",
       data: {
         ...newNote.toObject(),
         thumbnailUrl,
@@ -184,7 +184,7 @@ export const createNote = async (
 
     return res.status(500).json({
       success: false,
-      message: error?.message || "Upload failed.",
+      message: error?.message || "Upload failed",
     });
   }
 };

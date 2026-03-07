@@ -1,20 +1,14 @@
-import {
-  PutObjectCommand,
-  GetObjectCommand,
-  DeleteObjectCommand,
-} from "@aws-sdk/client-s3";
+import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3, S3_BUCKET_NAME } from "../../config/s3";
 import { promises as fs } from "fs";
 import crypto from "crypto";
 
 /* ================= CONSTANTS ================= */
-
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000;
 
 /* ================= RETRY WRAPPER ================= */
-
 const retryUpload = async <T>(
   uploadFn: () => Promise<T>,
   retries = MAX_RETRIES
@@ -39,10 +33,7 @@ const retryUpload = async <T>(
 /* ================= HELPERS ================= */
 
 const safeName = (name: string) =>
-  name
-    .toLowerCase()
-    .replace(/\s+/g, "_")
-    .replace(/[^a-z0-9._-]/g, "");
+  name.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9._-]/g, "");
 
 const readFileBuffer = async (file: Express.Multer.File) => {
   if (file.buffer) return file.buffer;
