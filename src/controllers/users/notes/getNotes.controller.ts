@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import NotesUpload from "../../../models/users/NotesUpload";
 import purchaseModel from "../../../models/payments/purchase.model";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { s3, S3_BUCKET_NAME } from "../../../config/s3";
 
@@ -54,15 +55,13 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
     const noteId = req.params.id;
     const userId = req.user?._id;
 
-    /* ---------- 1️⃣ Auth check ---------- */
+    /* ---------- Auth check ---------- */
 
     if (!userId) {
-      return res.status(401).json({
-        message: "Unauthorized",
-      });
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
-    /* ---------- 2️⃣ Purchase check ---------- */
+    /* ---------- Purchase check ---------- */
 
     const hasPurchased = await purchaseModel.exists({
       user: userId,
@@ -76,7 +75,7 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    /* ---------- 3️⃣ Find file ---------- */
+    /* ---------- Find file ---------- */
 
     const note = await NotesUpload.findById(noteId)
       .select("file")
@@ -88,44 +87,24 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    /* ---------- 4️⃣ Get file from S3 ---------- */
+    /* ---------- Generate Signed URL ---------- */
 
     const command = new GetObjectCommand({
       Bucket: S3_BUCKET_NAME,
       Key: note.file,
+      ResponseContentDisposition: "inline",
+      ResponseContentType: "application/pdf",
     });
 
-    const data = await s3.send(command);
-
-    if (!data.Body) {
-      return res.status(500).json({
-        message: "File stream missing",
-      });
-    }
-
-    /* ---------- 5️⃣ Important headers ---------- */
-
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", "inline");
-    res.setHeader("Cache-Control", "no-store");
-
-    // ⭐ REQUIRED FOR LARGE PDF STREAMING
-    res.setHeader("Accept-Ranges", "bytes");
-
-    if (data.ContentLength) {
-      res.setHeader("Content-Length", data.ContentLength.toString());
-    }
-
-    /* ---------- 6️⃣ Stream PDF ---------- */
-
-    const stream = data.Body as any;
-
-    stream.on("error", (err: any) => {
-      console.error("STREAM ERROR:", err);
-      res.end();
+    const signedUrl = await getSignedUrl(s3, command, {
+      expiresIn: 60, // seconds
     });
 
-    stream.pipe(res);
+    /* ---------- Send URL ---------- */
+
+    return res.json({
+      url: signedUrl,
+    });
 
   } catch (err) {
     console.error("PREVIEW ERROR:", err);
