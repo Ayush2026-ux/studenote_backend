@@ -1,10 +1,9 @@
 import { Request, Response } from "express";
+import axios from "axios";
 import NotesUpload from "../../../models/users/NotesUpload";
 import purchaseModel from "../../../models/payments/purchase.model";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { s3, S3_BUCKET_NAME } from "../../../config/s3";
 import { PDFDocument } from "pdf-lib";
+import { getS3SignedDownloadUrl } from "../../../services/users/uploadnots.services";
 
 interface AuthRequest extends Request {
   user?: { _id: string; fullName?: string };
@@ -24,10 +23,10 @@ export const getPublicNotes = async (req: AuthRequest, res: Response) => {
       notes.map(async (note: any) => {
         const isBought = userId
           ? await purchaseModel.exists({
-              user: userId,
-              note: note._id,
-              status: "paid",
-            })
+            user: userId,
+            note: note._id,
+            status: "paid",
+          })
           : false;
 
         return {
@@ -107,7 +106,7 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
       timeout: 30000,
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
-      validateStatus: (s) => s >= 200 && s < 300,
+      validateStatus: (s: number) => s >= 200 && s < 300,
     });
 
     // 🔥 FORCE INLINE VIEW (ANDROID DOWNLOAD MANAGER FIX)
@@ -118,24 +117,19 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
 
     // 🔓 Purchased → Full PDF
-    if (isPurchased) {
+    if (hasPurchased) {
       return res.status(200).send(Buffer.from(pdfResponse.data));
     }
 
-    // 🔒 Not purchased → Preview (10 pages + watermark)
+    // 🔒 Not purchased → Preview (10 pages)
     const original = await PDFDocument.load(pdfResponse.data);
     const preview = await PDFDocument.create();
+    const pageCount = Math.min(10, original.getPageCount());
+    const pages = await preview.copyPages(original, Array.from({ length: pageCount }, (_, i) => i));
+    pages.forEach((page) => preview.addPage(page));
+    const previewBytes = await preview.save();
 
-    const signedUrl = await getSignedUrl(s3, command, {
-      expiresIn: 900,
-    });
-
-    console.log("SIGNED URL GENERATED");
-
-    return res.json({
-      success: true,
-      url: signedUrl,
-    });
+    return res.status(200).send(Buffer.from(previewBytes));
 
   } catch (err) {
     console.error("---- PREVIEW ERROR ----");
