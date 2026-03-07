@@ -1,35 +1,29 @@
+
+
 import { Request, Response } from "express";
 import { PDFDocument } from "pdf-lib";
 import { createNoteSchema } from "../../../validators/note.zod";
 import NotesUpload from "../../../models/users/NotesUpload";
 import { promises as fs } from "fs";
+
 import {
   getS3SignedDownloadUrl,
   uploadToS3,
 } from "../../../services/users/uploadnots.services";
 
-/* =========================================================
-   CREATE NOTE CONTROLLER (FINAL PRODUCTION VERSION)
-========================================================= */
-
-const UPLOAD_TIMEOUT = 1800000; // 30 minutes
+/* ================= CONTROLLER ================= */
 
 export const createNote = async (
   req: Request & { user?: any; files?: any },
   res: Response
 ) => {
   try {
-    /* ================= TIMEOUT ================= */
-
-    req.setTimeout(UPLOAD_TIMEOUT);
-    res.setTimeout(UPLOAD_TIMEOUT);
-
-    /* ================= AUTH CHECK ================= */
+    /* ================= AUTH ================= */
 
     if (!req.user?._id) {
       return res.status(401).json({
         success: false,
-        message: "Unauthorized user",
+        message: "Unauthorized",
       });
     }
 
@@ -53,27 +47,27 @@ export const createNote = async (
     if (!thumbnailFile || !pdfFile) {
       return res.status(400).json({
         success: false,
-        message: "Both thumbnail and PDF are required.",
+        message: "Both thumbnail and PDF are required",
       });
     }
 
-    /* ================= FILE SIZE VALIDATION ================= */
+    /* ================= SIZE CHECK ================= */
 
     if (pdfFile.size > 150 * 1024 * 1024) {
       return res.status(413).json({
         success: false,
-        message: "PDF file exceeds 150 MB limit.",
+        message: "PDF exceeds 150MB limit",
       });
     }
 
     if (thumbnailFile.size > 10 * 1024 * 1024) {
       return res.status(413).json({
         success: false,
-        message: "Thumbnail exceeds 10 MB limit.",
+        message: "Thumbnail exceeds 10MB limit",
       });
     }
 
-    /* ================= READ PDF BUFFER ================= */
+    /* ================= READ PDF ================= */
 
     let pdfBuffer: Buffer;
 
@@ -84,23 +78,22 @@ export const createNote = async (
     } else {
       return res.status(400).json({
         success: false,
-        message: "Unable to read uploaded PDF file.",
+        message: "Unable to read PDF",
       });
     }
 
-    /* ================= PDF HEADER VALIDATION ================= */
+    /* ================= VALIDATE PDF ================= */
 
     const header = pdfBuffer.toString("utf8", 0, 5);
+
     if (!header.startsWith("%PDF")) {
       return res.status(400).json({
         success: false,
-        message: "Invalid PDF file.",
+        message: "Invalid PDF file",
       });
     }
 
-    /* ================= PAGE COUNT VALIDATION ================= */
-
-    let pageCount: number;
+    let pageCount = 0;
 
     try {
       const pdfDoc = await PDFDocument.load(pdfBuffer, {
@@ -108,51 +101,40 @@ export const createNote = async (
       });
 
       pageCount = pdfDoc.getPageCount();
-    } catch (err) {
+    } catch {
       return res.status(400).json({
         success: false,
-        message: "Failed to parse PDF.",
+        message: "Failed to parse PDF",
       });
     }
 
     if (pageCount < 1 || pageCount > 500) {
       return res.status(400).json({
         success: false,
-        message: "PDF must contain 1–500 pages.",
+        message: "PDF must contain 1–500 pages",
       });
     }
 
-    /* ================= UPLOAD TO S3 ================= */
+    /* ================= UPLOAD FILES ================= */
 
-    let thumbnailKey: string;
-    let pdfKey: string;
+    const [thumbRes, pdfRes] = await Promise.all([
+      uploadToS3(thumbnailFile, "thumbnails", req.user._id),
+      uploadToS3(pdfFile, "notes", req.user._id),
+    ]);
 
-    try {
-      const [thumbUpload, pdfUpload] = await Promise.all([
-        uploadToS3(thumbnailFile, "thumbnails", req.user._id),
-        uploadToS3(pdfFile, "notes", req.user._id),
-      ]);
+    const thumbnailKey = thumbRes.key;
+    const pdfKey = pdfRes.key;
 
-      thumbnailKey = thumbUpload.key;
-      pdfKey = pdfUpload.key;
-    } catch (uploadError: any) {
-      return res.status(502).json({
-        success: false,
-        message:
-          uploadError?.message || "Failed to upload files to storage.",
-      });
-    }
-
-    /* ================= VALIDATE DATA ================= */
+    /* ================= BUILD DATA ================= */
 
     const noteData = {
-      title: String(req.body.title || "").trim(),
-      description: String(req.body.description || "").trim(),
-      course: String(req.body.course),
-      subject: String(req.body.subject),
+      title: req.body.title?.trim(),
+      description: req.body.description?.trim(),
+      course: req.body.course?.trim(),
+      subject: req.body.subject?.trim(),
       semester: req.body.semester?.trim() || undefined,
-      fileType: String(req.body.fileType),
-      price: Number(req.body.price),
+      fileType: req.body.fileType?.trim(),
+      price: req.body.price ? Number(req.body.price) : 0,
       pages: pageCount,
       thumbnail: thumbnailKey,
       file: pdfKey,
@@ -160,29 +142,31 @@ export const createNote = async (
       uploadedBy: req.user._id,
     };
 
+    /* ================= VALIDATE ================= */
+
     const validatedData = createNoteSchema.parse(noteData);
 
-    /* ================= SAVE TO DATABASE ================= */
+    /* ================= SAVE ================= */
 
     const newNote = await NotesUpload.create(validatedData);
 
-    /* ================= GENERATE SIGNED URLS ================= */
+    /* ================= SIGNED URLS ================= */
 
     const thumbnailUrl = await getS3SignedDownloadUrl(
       thumbnailKey,
-      60 * 60
+      3600,
+      "image/jpeg"
     );
 
     const pdfUrl = await getS3SignedDownloadUrl(
       pdfKey,
-      60 * 10
+      600,
+      "application/pdf"
     );
-
-    /* ================= SUCCESS RESPONSE ================= */
 
     return res.status(201).json({
       success: true,
-      message: "Notes uploaded successfully.",
+      message: "Notes uploaded successfully",
       data: {
         ...newNote.toObject(),
         thumbnailUrl,
@@ -198,11 +182,9 @@ export const createNote = async (
       });
     }
 
-    console.error("CREATE NOTE ERROR:", error);
-
     return res.status(500).json({
       success: false,
-      message: error?.message || "Upload failed.",
+      message: error?.message || "Upload failed",
     });
   }
 };
