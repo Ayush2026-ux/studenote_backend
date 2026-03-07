@@ -130,19 +130,19 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
       validateStatus: (s) => s >= 200 && s < 300,
     });
 
-    // 🔥 FORCE INLINE VIEW (ANDROID DOWNLOAD MANAGER FIX)
+    //  FORCE INLINE VIEW (ANDROID DOWNLOAD MANAGER FIX)
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", 'inline; filename="note.pdf"');
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("X-Content-Type-Options", "nosniff");
 
-    // 🔓 Purchased → Full PDF
+    // Purchased → Full PDF
     if (isPurchased) {
       return res.status(200).send(Buffer.from(pdfResponse.data));
     }
 
-    // 🔒 Not purchased → Preview (10 pages + watermark)
+    // Not purchased → Preview (10 pages + watermark)
     const original = await PDFDocument.load(pdfResponse.data);
     const preview = await PDFDocument.create();
 
