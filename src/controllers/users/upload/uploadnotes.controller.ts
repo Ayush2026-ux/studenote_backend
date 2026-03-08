@@ -8,14 +8,14 @@ import { promises as fs } from "fs";
 import {
   getS3SignedDownloadUrl,
   uploadToS3,
-  uploadBufferToS3,
+  uploadFileStreamToS3,
   deleteFromS3,
 } from "../../../services/users/uploadnots.services";
 
 /* ================= CONSTANTS ================= */
 
-/** Files above this threshold use lightweight page counting (avoids pdf-lib OOM) */
-const LARGE_PDF_THRESHOLD = 70 * 1024 * 1024; // 70 MB
+/** Files above this threshold use lightweight page counting (avoids pdf-lib overhead) */
+const LARGE_PDF_THRESHOLD = 15 * 1024 * 1024; // 15 MB
 
 /** Maximum time allowed for pdf-lib parsing before aborting */
 const PDF_PARSE_TIMEOUT_MS = 30_000; // 30 seconds
@@ -165,62 +165,55 @@ export const createNote = async (
       });
     }
 
-    /* ================= READ PDF ================= */
+    /* ================= VALIDATE PDF ================= */
 
-    let pdfBuffer: Buffer | null;
-
-    if (pdfFile.buffer) {
-      pdfBuffer = pdfFile.buffer;
-    } else if (pdfFile.path) {
-      pdfBuffer = await fs.readFile(pdfFile.path);
-    } else {
+    if (!pdfFile.path) {
       return res.status(400).json({
         success: false,
         message: "Unable to read PDF",
       });
     }
 
-    /* ================= VALIDATE PDF ================= */
+    // Read only the first 5 bytes for header validation
+    const fh = await fs.open(pdfFile.path, "r");
+    const headerBuf = Buffer.alloc(5);
+    await fh.read(headerBuf, 0, 5, 0);
+    await fh.close();
 
-    const header = pdfBuffer.toString("utf8", 0, 5);
-
-    if (!header.startsWith("%PDF")) {
+    if (!headerBuf.toString("utf8").startsWith("%PDF")) {
       return res.status(400).json({
         success: false,
         message: "Invalid PDF file",
       });
     }
 
+    /* ================= COUNT PAGES ================= */
+
     let pageCount = 0;
 
-    if (pdfBuffer.length > LARGE_PDF_THRESHOLD) {
-      /* --- Large file (>70 MB): lightweight byte-level page count (no OOM risk) --- */
-      pageCount = countPagesLightweight(pdfBuffer);
-    } else {
-      /* --- Normal file: precise pdf-lib page count + lossless compression --- */
-      try {
-        const pdfDoc = await withTimeout(
-          PDFDocument.load(pdfBuffer, { ignoreEncryption: true }),
-          PDF_PARSE_TIMEOUT_MS,
-          "PDF parsing timed out"
-        );
-        pageCount = pdfDoc.getPageCount();
+    {
+      const pdfBuffer = await fs.readFile(pdfFile.path);
 
-        // Re-save with object-stream compression (lossless — quality unchanged, size reduced)
-        const compressed = await pdfDoc.save({ useObjectStreams: true });
-        const compressedBuf = Buffer.from(compressed);
-
-        // Only use compressed version if it's actually smaller
-        if (compressedBuf.length < pdfBuffer.length) {
-          pdfBuffer = compressedBuf;
-        }
-      } catch {
-        // pdf-lib failed — fall back to lightweight byte-pattern counter
+      if (pdfBuffer.length > LARGE_PDF_THRESHOLD) {
+        /* --- Large file (>15 MB): lightweight byte-level page count (instant) --- */
         pageCount = countPagesLightweight(pdfBuffer);
+      } else {
+        /* --- Small file: precise pdf-lib page count (no compression/re-save) --- */
+        try {
+          const pdfDoc = await withTimeout(
+            PDFDocument.load(pdfBuffer, { ignoreEncryption: true }),
+            PDF_PARSE_TIMEOUT_MS,
+            "PDF parsing timed out"
+          );
+          pageCount = pdfDoc.getPageCount();
+        } catch {
+          // pdf-lib failed — fall back to lightweight byte-pattern counter
+          pageCount = countPagesLightweight(pdfBuffer);
+        }
       }
     }
+    // pdfBuffer is block-scoped — GC can reclaim immediately
 
-    // Fallback: if both methods returned 0 but the PDF header is valid, count as 1 page
     if (pageCount < 1) {
       pageCount = 1;
     }
@@ -267,15 +260,12 @@ export const createNote = async (
 
     const [thumbRes, pdfRes] = await Promise.all([
       uploadToS3(thumbnailFile, "thumbnails", req.user._id),
-      // Pass pre-loaded buffer directly — avoids re-reading PDF from disk
-      uploadBufferToS3(pdfBuffer, pdfFile, "notes", req.user._id),
+      // Stream PDF directly from disk to S3 — no full buffer in memory
+      uploadFileStreamToS3(pdfFile.path, pdfFile, "notes", req.user._id),
     ]);
 
     thumbnailKey = thumbRes.key;
     pdfKey = pdfRes.key;
-
-    // Release the buffer so GC can reclaim memory immediately
-    pdfBuffer = null;
 
     /* ================= BUILD FINAL DATA ================= */
 

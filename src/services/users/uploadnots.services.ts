@@ -2,7 +2,7 @@ import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sd
 import { Upload } from "@aws-sdk/lib-storage";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3, S3_BUCKET_NAME } from "../../config/s3";
-import { promises as fs } from "fs";
+import { promises as fs, createReadStream } from "fs";
 import crypto from "crypto";
 
 /* ================= CONSTANTS ================= */
@@ -14,7 +14,7 @@ const RETRY_DELAY = 1000;
  * AWS recommends multipart for anything > 25 MB.
  * Benefits: chunked transfer, per-part retry, parallel part upload.
  */
-const MULTIPART_THRESHOLD = 50 * 1024 * 1024; // 50 MB
+const MULTIPART_THRESHOLD = 25 * 1024 * 1024; // 25 MB (AWS recommended)
 const MULTIPART_PART_SIZE = 10 * 1024 * 1024; // 10 MB per part
 const MULTIPART_CONCURRENCY = 4; // parallel part uploads
 
@@ -119,8 +119,8 @@ export const uploadToS3 = async (
   if (buffer.length > MULTIPART_THRESHOLD) {
     /* --- Large file: multipart upload (chunked, parallel, per-part retry) --- */
     await retryUpload(() =>
-  multipartUpload(key, buffer, contentType, cacheControl)
-);
+      multipartUpload(key, buffer, contentType, cacheControl)
+    );
   } else {
     /* --- Small file: single PutObject with retry wrapper --- */
     const uploadFn = async () => {
@@ -167,8 +167,8 @@ export const uploadBufferToS3 = async (
   if (buffer.length > MULTIPART_THRESHOLD) {
     /* --- Large file: multipart upload (chunked, parallel, per-part retry) --- */
     await retryUpload(() =>
-  multipartUpload(key, buffer, contentType, cacheControl)
-);
+      multipartUpload(key, buffer, contentType, cacheControl)
+    );
   } else {
     /* --- Small file: single PutObject with retry wrapper --- */
     const uploadFn = async () => {
@@ -227,6 +227,48 @@ export const getS3SignedDownloadUrl = async (
     }),
     { expiresIn: expiresInSec }
   );
+};
+
+/* ================= STREAM UPLOAD FROM DISK ================= */
+
+/**
+ * Stream a file directly from disk to S3 using multipart upload.
+ * Avoids loading the entire file into memory — ideal for large PDFs.
+ */
+export const uploadFileStreamToS3 = async (
+  filePath: string,
+  file: Express.Multer.File,
+  folder: "thumbnails" | "notes" | string,
+  userId: string
+): Promise<{ key: string }> => {
+  const unique = crypto.randomBytes(8).toString("hex");
+
+  const key = `${folder}/${userId}/${Date.now()}_${unique}_${safeName(
+    file.originalname
+  )}`;
+
+  const contentType = file.mimetype ?? "application/octet-stream";
+  const cacheControl = getCacheControl(contentType);
+
+  const stream = createReadStream(filePath);
+
+  const upload = new Upload({
+    client: s3,
+    params: {
+      Bucket: S3_BUCKET_NAME,
+      Key: key,
+      Body: stream,
+      ContentType: contentType,
+      ContentLength: file.size,
+      CacheControl: cacheControl,
+    },
+    queueSize: MULTIPART_CONCURRENCY,
+    partSize: MULTIPART_PART_SIZE,
+    leavePartsOnError: false,
+  });
+
+  await upload.done();
+  return { key };
 };
 
 /* ================= DELETE ================= */
