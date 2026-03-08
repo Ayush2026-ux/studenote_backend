@@ -232,6 +232,33 @@ export const createNote = async (
       });
     }
 
+    /* ================= EARLY BODY VALIDATION (before S3 upload) ================= */
+
+    const earlyData = {
+      title: req.body.title?.trim(),
+      description: req.body.description?.trim(),
+      course: req.body.course?.trim(),
+      subject: req.body.subject?.trim(),
+      semester: req.body.semester?.trim() || undefined,
+      fileType: req.body.fileType?.trim(),
+      price: req.body.price ? Number(req.body.price) : 0,
+      pages: pageCount,
+      thumbnail: "placeholder",
+      file: "placeholder",
+      university: req.body.university?.trim() || undefined,
+      uploadedBy: req.user._id,
+    };
+
+    const earlyCheck = createNoteSchema.safeParse(earlyData);
+
+    if (!earlyCheck.success) {
+      return res.status(400).json({
+        success: false,
+        message: earlyCheck.error.issues[0]?.message || "Validation error",
+        errors: earlyCheck.error.issues,
+      });
+    }
+
     /* ================= ABORT CHECK BEFORE S3 ================= */
 
     if (req.socket?.destroyed) return;
@@ -250,21 +277,12 @@ export const createNote = async (
     // Release the buffer so GC can reclaim memory immediately
     pdfBuffer = null;
 
-    /* ================= BUILD DATA ================= */
+    /* ================= BUILD FINAL DATA ================= */
 
     const noteData = {
-      title: req.body.title?.trim(),
-      description: req.body.description?.trim(),
-      course: req.body.course?.trim(),
-      subject: req.body.subject?.trim(),
-      semester: req.body.semester?.trim() || undefined,
-      fileType: req.body.fileType?.trim(),
-      price: req.body.price ? Number(req.body.price) : 0,
-      pages: pageCount,
+      ...earlyData,
       thumbnail: thumbnailKey,
       file: pdfKey,
-      university: req.body.university?.trim() || undefined,
-      uploadedBy: req.user._id,
     };
 
     /* ================= VALIDATE ================= */
@@ -299,8 +317,8 @@ export const createNote = async (
     if (error.name === "ZodError") {
       return res.status(400).json({
         success: false,
-        message: error.errors?.[0]?.message || "Validation error",
-        errors: error.errors,
+        message: error.issues?.[0]?.message || "Validation error",
+        errors: error.issues,
       });
     }
 
