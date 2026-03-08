@@ -215,11 +215,14 @@ export const createNote = async (
           pdfBuffer = compressedBuf;
         }
       } catch {
-        return res.status(400).json({
-          success: false,
-          message: "Failed to parse PDF",
-        });
+        // pdf-lib failed — fall back to lightweight byte-pattern counter
+        pageCount = countPagesLightweight(pdfBuffer);
       }
+    }
+
+    // Fallback: if both methods returned 0 but the PDF header is valid, count as 1 page
+    if (pageCount < 1) {
+      pageCount = 1;
     }
 
     if (pageCount < 1 || pageCount > 500) {
@@ -296,7 +299,7 @@ export const createNote = async (
     if (error.name === "ZodError") {
       return res.status(400).json({
         success: false,
-        message: "Validation error",
+        message: error.errors?.[0]?.message || "Validation error",
         errors: error.errors,
       });
     }
