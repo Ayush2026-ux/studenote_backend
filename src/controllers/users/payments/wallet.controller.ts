@@ -1,5 +1,4 @@
 // users/payments/wallet.controller.ts
-
 import { Request, Response } from "express";
 import mongoose from "mongoose";
 import walletModel from "../../../models/payments/wallet.model";
@@ -9,9 +8,7 @@ import { requestPayout } from "../../../services/payments/payout.service";
 interface AuthRequest extends Request {
   user: { _id: string };
 }
-
 /* ================= GET WALLET ================= */
-
 export const getWallet = async (req: AuthRequest, res: Response) => {
   try {
     let wallet = await walletModel.findOne({ user: req.user._id });
@@ -49,22 +46,21 @@ export const withdrawWallet = async (req: AuthRequest, res: Response) => {
       bankIfsc,
     } = req.body;
 
-    /* 🔥 BASIC VALIDATIONS */
+    /* BASIC VALIDATIONS */
 
     if (!amount || amount <= 0) {
       throw new Error("Invalid withdrawal amount");
     }
 
-    if (amount < 100) {
-      throw new Error("Minimum withdrawal amount is ₹100");
+    if (amount < 20) {
+      throw new Error("Minimum withdrawal amount is ₹20");
     }
 
     if (!["upi", "bank"].includes(method)) {
       throw new Error("Invalid withdrawal method");
     }
 
-    /* 🔥 FETCH WALLET */
-
+    /*FETCH WALLET */
     const wallet = await walletModel.findOne({ user: req.user._id }).session(
       session
     );
@@ -77,13 +73,13 @@ export const withdrawWallet = async (req: AuthRequest, res: Response) => {
       throw new Error("Insufficient wallet balance");
     }
 
-    /* 🔥 DEDUCT BALANCE (PREVENT DOUBLE WITHDRAW) */
+    /*DEDUCT BALANCE (PREVENT DOUBLE WITHDRAW) */
 
     wallet.balance -= amount;
     wallet.totalWithdrawn += amount;
     await wallet.save({ session });
 
-    /* 🔥 CREATE PAYOUT RECORD (PENDING ADMIN APPROVAL) */
+    /*CREATE PAYOUT RECORD (PENDING ADMIN APPROVAL) */
 
     const payout = await payoutModel.create(
       [
@@ -105,7 +101,7 @@ export const withdrawWallet = async (req: AuthRequest, res: Response) => {
     await session.commitTransaction();
     session.endSession();
 
-    /* 🔥 OPTIONAL: If instant payout enabled */
+    /*OPTIONAL: If instant payout enabled */
     // await requestPayout(...);
 
     return res.json({

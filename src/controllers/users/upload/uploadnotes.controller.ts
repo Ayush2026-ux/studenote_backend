@@ -14,9 +14,6 @@ import {
 
 /* ================= CONSTANTS ================= */
 
-/** Files above this threshold use lightweight page counting (avoids pdf-lib overhead) */
-const LARGE_PDF_THRESHOLD = 15 * 1024 * 1024; // 15 MB
-
 /** Maximum time allowed for pdf-lib parsing before aborting */
 const PDF_PARSE_TIMEOUT_MS = 30_000; // 30 seconds
 
@@ -194,22 +191,18 @@ export const createNote = async (
     {
       const pdfBuffer = await fs.readFile(pdfFile.path);
 
-      if (pdfBuffer.length > LARGE_PDF_THRESHOLD) {
-        /* --- Large file (>15 MB): lightweight byte-level page count (instant) --- */
+      try {
+        // pdf-lib load() only parses the page tree — fast even for large files
+        // (the slow part was save() which we removed)
+        const pdfDoc = await withTimeout(
+          PDFDocument.load(pdfBuffer, { ignoreEncryption: true }),
+          PDF_PARSE_TIMEOUT_MS,
+          "PDF parsing timed out"
+        );
+        pageCount = pdfDoc.getPageCount();
+      } catch {
+        // pdf-lib failed — fall back to lightweight byte-pattern counter
         pageCount = countPagesLightweight(pdfBuffer);
-      } else {
-        /* --- Small file: precise pdf-lib page count (no compression/re-save) --- */
-        try {
-          const pdfDoc = await withTimeout(
-            PDFDocument.load(pdfBuffer, { ignoreEncryption: true }),
-            PDF_PARSE_TIMEOUT_MS,
-            "PDF parsing timed out"
-          );
-          pageCount = pdfDoc.getPageCount();
-        } catch {
-          // pdf-lib failed — fall back to lightweight byte-pattern counter
-          pageCount = countPagesLightweight(pdfBuffer);
-        }
       }
     }
     // pdfBuffer is block-scoped — GC can reclaim immediately
@@ -218,7 +211,7 @@ export const createNote = async (
       pageCount = 1;
     }
 
-    if (pageCount < 1 || pageCount > 500) {
+    if (pageCount > 500) {
       return res.status(400).json({
         success: false,
         message: "PDF must contain 1–500 pages",
