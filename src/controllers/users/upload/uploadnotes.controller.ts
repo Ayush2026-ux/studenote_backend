@@ -1,5 +1,4 @@
 
-
 import { Request, Response } from "express";
 import { PDFDocument } from "pdf-lib";
 import { createNoteSchema } from "../../../validators/note.zod";
@@ -16,7 +15,7 @@ import {
 /* ================= CONSTANTS ================= */
 
 /** Files above this threshold use lightweight page counting (avoids pdf-lib OOM) */
-const LARGE_PDF_THRESHOLD = 50 * 1024 * 1024; // 50 MB
+const LARGE_PDF_THRESHOLD = 70 * 1024 * 1024; // 70 MB
 
 /** Maximum time allowed for pdf-lib parsing before aborting */
 const PDF_PARSE_TIMEOUT_MS = 30_000; // 30 seconds
@@ -195,10 +194,10 @@ export const createNote = async (
     let pageCount = 0;
 
     if (pdfBuffer.length > LARGE_PDF_THRESHOLD) {
-      /* --- Large file (>50 MB): lightweight byte-level page count (no OOM risk) --- */
+      /* --- Large file (>70 MB): lightweight byte-level page count (no OOM risk) --- */
       pageCount = countPagesLightweight(pdfBuffer);
     } else {
-      /* --- Normal file: precise pdf-lib page count with timeout guard --- */
+      /* --- Normal file: precise pdf-lib page count + lossless compression --- */
       try {
         const pdfDoc = await withTimeout(
           PDFDocument.load(pdfBuffer, { ignoreEncryption: true }),
@@ -206,6 +205,15 @@ export const createNote = async (
           "PDF parsing timed out"
         );
         pageCount = pdfDoc.getPageCount();
+
+        // Re-save with object-stream compression (lossless — quality unchanged, size reduced)
+        const compressed = await pdfDoc.save({ useObjectStreams: true });
+        const compressedBuf = Buffer.from(compressed);
+
+        // Only use compressed version if it's actually smaller
+        if (compressedBuf.length < pdfBuffer.length) {
+          pdfBuffer = compressedBuf;
+        }
       } catch {
         return res.status(400).json({
           success: false,
