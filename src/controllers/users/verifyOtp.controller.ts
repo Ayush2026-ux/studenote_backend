@@ -9,7 +9,7 @@ import {
   generateAdminAccessToken,
   generateAdminRefreshToken,
 } from "../../utils/jwt";
-import { sendLoginAlertEmail } from "../../utils/sendLoginAlertEmail";
+import { sendLoginAlertEmail } from "../../services/mail/loginAlert.mail";
 import { getLocationFromIp } from "../../utils/getLocationFromIp";
 import { getClientIp } from "../../utils/getClientIp";
 

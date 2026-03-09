@@ -7,8 +7,8 @@ export const updateProfile = async (
   res: Response
 ) => {
   try {
-    // ✅ CORRECT: use userId
-    const userId = req.user?.userId;
+
+    const userId = req.user?._id;
 
     if (!userId) {
       return res.status(401).json({
@@ -22,10 +22,10 @@ export const updateProfile = async (
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       {
-        ...(fullName !== undefined && { fullName }),
-        ...(username !== undefined && { username }),
-        ...(mobile !== undefined && { mobile }),
-        ...(avatar !== undefined && { avatar }),
+        ...(fullName && { fullName }),
+        ...(username && { username }),
+        ...(mobile && { mobile }),
+        ...(avatar && { avatar }),
       },
       {
         new: true,
@@ -43,10 +43,12 @@ export const updateProfile = async (
     return res.status(200).json({
       success: true,
       message: "Profile updated successfully",
-      user: updatedUser, // 🔥 frontend expects this
+      user: updatedUser,
     });
+
   } catch (err) {
     console.error("UPDATE PROFILE ERROR:", err);
+
     return res.status(500).json({
       success: false,
       message: "Profile update failed",

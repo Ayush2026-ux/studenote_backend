@@ -134,6 +134,7 @@ export const createNoteSchema = z
             .min(1, { message: "Pages must be at least 1" })
             .max(500, { message: "Pages must be at most 500" })
             .optional(),
+        uploadedBy: z.any(),
     })
     .superRefine((data, ctx) => {
         const rule = FILE_TYPE_PRICING[data.fileType];

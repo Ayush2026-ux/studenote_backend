@@ -2,6 +2,7 @@ import Session from "../../../models/users/session.model";
 import User from "../../../models/users/users.models";
 import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
+import { generateAccessToken, generateRefreshToken } from "../../../utils/jwt";
 
 export const refreshTokenController = async (req: Request, res: Response) => {
   try {
@@ -19,7 +20,7 @@ export const refreshTokenController = async (req: Request, res: Response) => {
       process.env.JWT_REFRESH_SECRET!
     );
 
-    const userId = decoded.userId || decoded._id;
+    const userId = decoded.userId;
     if (!userId) {
       return res.status(401).json({
         success: false,
@@ -35,9 +36,9 @@ export const refreshTokenController = async (req: Request, res: Response) => {
       });
     }
 
-    //  FIX: Don't strictly match token to avoid race condition
     const session = await Session.findOne({
       userId: user._id,
+      token: refreshToken,
       isRevoked: false,
     });
 
@@ -48,17 +49,10 @@ export const refreshTokenController = async (req: Request, res: Response) => {
       });
     }
 
-    const newAccessToken = jwt.sign(
-      { _id: user._id },
-      process.env.JWT_SECRET!,
-      { expiresIn: "40m" }
-    );
+    const payload = { userId: user._id.toString() };
 
-    const newRefreshToken = jwt.sign(
-      { _id: user._id },
-      process.env.JWT_REFRESH_SECRET!,
-      { expiresIn: "365d" }
-    );
+    const newAccessToken = generateAccessToken(payload);
+    const newRefreshToken = generateRefreshToken(payload);
 
     session.token = newRefreshToken;
     session.lastActiveAt = new Date();
@@ -71,6 +65,7 @@ export const refreshTokenController = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error("REFRESH TOKEN ERROR:", error.message);
+
     return res.status(401).json({
       success: false,
       message: "Invalid or expired refresh token",
