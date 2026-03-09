@@ -22,10 +22,10 @@ export const updateProfile = async (
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       {
-        ...(fullName !== undefined && { fullName }),
-        ...(username !== undefined && { username }),
-        ...(mobile !== undefined && { mobile }),
-        ...(avatar !== undefined && { avatar }),
+        ...(fullName && { fullName }),
+        ...(username && { username }),
+        ...(mobile && { mobile }),
+        ...(avatar && { avatar }),
       },
       {
         new: true,
@@ -48,6 +48,7 @@ export const updateProfile = async (
 
   } catch (err) {
     console.error("UPDATE PROFILE ERROR:", err);
+
     return res.status(500).json({
       success: false,
       message: "Profile update failed",
