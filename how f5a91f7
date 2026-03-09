@@ -1,0 +1,103 @@
+[33mf5a91f7[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m 20rs i'm change in willet
+[33m69a8114[m add to upload time reduce when the upload pdf
+[33m4de18aa[m viladition error still solved it try
+[33mb5dca4d[m Validation error fix
+[33m920a254[m upload data will changes
+[33m5cf8d56[m Merge remote-tracking branch 'origin/yuvraj'
+[33m75cc336[m[33m ([m[1;31morigin/yuvraj[m[33m)[m feat: add optimized S3 upload with multipart support, retry logic, and caching
+[33m26675b0[m login mail alert isssu solved
+[33m6d90dd1[m console log all data get solved
+[33m7dfbc01[m 401 error solve after login succes
+[33m7bf1824[m Merge branch 'main' of github.com:studenote2026/backend-studenote
+[33m2384bd8[m upload by error solved
+[33m0cac646[m Merge branch 'main' of https://github.com/studenote2026/backend-studenote
+[33md033a19[m upload try 1
+[33mc729d6e[m commin
+[33mf064a88[m Merge origin/main - resolve conflicts
+[33m9aa9430[m upload notes error solved try
+[33m2d0129b[m pdf try 4
+[33m3c469ff[m pdf try 3
+[33mdcc1fba[m pdf try 2
+[33mcf446eb[m pdf try 1
+[33mc0af5fc[m[33m ([m[1;31morigin/ayush[m[33m, [m[1;32mayush[m[33m)[m pdf preview error try 1
+[33mcb6d28f[m payment and wallet
+[33m8e1a709[m pdf try 5
+[33m0bd4cf5[m pdf try 4
+[33m2c8da95[m remove compressed
+[33m210fe8f[m compressed check 1
+[33m0a1fd14[m compress try 1
+[33mc154f46[m pdf try 3
+[33mc0fe1a6[m pdf try 2
+[33m4e0a07a[m pdf try 1
+[33me88d90f[m Merge branch 'main' of https://github.com/studenote2026/backend-studenote
+[33m6f3b9d9[m pdf preview try
+[33m261ec95[m bou and full pdf view try 7
+[33mb2be354[m add origin api
+[33m7c1e114[m saved chnages data
+[33m0d2d5d5[m admin secrate added in login pages
+[33me386e88[m admin secrate added
+[33mfa7b7bc[m bou and full pdf view try 6
+[33m3350b14[m bou and full pdf view try 5
+[33m2bb02dd[m bou and full pdf view try 4
+[33ma559631[m bou and full pdf view try 3
+[33mb799b30[m bou and full pdf view try 2
+[33m7f1c6cf[m bou and full pdf view try 1
+[33m4579cd7[m Fix preview try 4
+[33md06dcca[m Fix preview try 3
+[33me10f2cb[m Fix preview try 2
+[33m0060bba[m Fix preview try 1
+[33m6c461e5[m Fix thumbnails signed URL + routes cleanup
+[33m43c5ad5[m add feed s3 data
+[33m92d2eef[m add the cache
+[33m2a07e01[m user also give file and pdf
+[33m2113311[m user info used
+[33me3c7a6a[m get data for user file
+[33m250853c[m Fix CORS cache-control preflight issue
+[33m7c44ad7[m note.zod.ts file changes
+[33m8932caa[m sum error solved
+[33m1cbef8f[m user ispurces right kknow
+[33m2b00256[m user id missing
+[33mc13c17b[m add origin
+[33m990c90e[m add origin new * and add /*
+[33ma0dbf53[m add origin new *
+[33m82e9511[m add origin data
+[33m9325d12[m add proview notes
+[33mc7b31ff[m add rate limit error solved
+[33m491ae13[m add core fixed *
+[33md03a9ab[m add core fixed
+[33m3e13e95[m handel all cors error
+[33m1511844[m login email new aws and Origin
+[33ma88818c[m login email new aws
+[33m72c95c7[m login email new services
+[33m3fc0711[m login user brove
+[33m206266b[m login send mail are check
+[33m0951bc7[m add more debugger
+[33mef3781b[m add Origine and degbuer
+[33m04f1215[m add Origine
+[33mcc03d8b[m add one more time nodemailer
+[33me6dc797[m Manage the aws email
+[33mc9a0362[m Manage the nodemailer
+[33mb9febff[m nodemailer problom
+[33m45a8b76[m nodemailer problom solved try
+[33ma79f901[m add domain name in .env
+[33me6d7370[m add domain
+[33mc39624c[m .env issue solved
+[33m1134bcb[m add support
+[33ma2089f8[m add Paymet Successfully
+[33m0e1b0fa[m Add Payment Methods
+[33mf8806d9[m Merge branch 'main' into main
+[33m13314c1[m Duplicates are removed
+[33me141207[m support works
+[33m4bc8653[m resolve merge conflicts
+[33m391408c[m resolve merge conflicts
+[33m3f5f0fd[m profile section working
+[33m9d46092[m Merge pull request #1 from SarvanMaurya123/main
+[33m43e417e[m feed section
+[33m2ff9636[m upload works
+[33m7ae03ed[m setting profile
+[33ma5d83eb[m login info improvement
+[33me0f03fc[m upload sucessfully working
+[33m915e5a6[m Fix auth setup: switch to bcryptjs, resolve conflicts, stable backend
+[33m3ae7525[m Add colorful Gmail-friendly OTP & welcome email templates and login, register, forgetpass integrated
+[33m5faefef[m this is code for login and register successfully
+[33m0208ea7[m first commit
