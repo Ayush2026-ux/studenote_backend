@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import NotesUpload from "../../models/users/NotesUpload";
+import Purchase from "../../models/payments/purchase.model";
 import { getS3SignedDownloadUrl } from "../../services/users/uploadnots.services";
 
 interface AuthRequest extends Request {
@@ -9,14 +10,40 @@ interface AuthRequest extends Request {
 export const previewNotePdf = async (req: AuthRequest, res: Response) => {
   try {
     const noteId = req.params.id;
+    const userId = req.user?._id;
 
-    const note = await NotesUpload.findById(noteId).select("file").lean();
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    const note = await NotesUpload.findById(noteId).select("file uploadedBy").lean();
 
     if (!note?.file) {
       return res.status(404).json({
         success: false,
         message: "PDF not found",
       });
+    }
+
+    let isBought = false;
+
+    // Check if user is the author
+    if (note.uploadedBy?.toString() === userId.toString()) {
+      isBought = true;
+    } else {
+      // Check if user has purchased the note
+      const purchase = await Purchase.findOne({
+        user: userId,
+        note: noteId,
+        status: "paid"
+      });
+
+      if (purchase) {
+        isBought = true;
+      }
     }
 
     const signedUrl = await getS3SignedDownloadUrl(
@@ -28,6 +55,7 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
     return res.status(200).json({
       success: true,
       url: signedUrl,
+      isBought,
     });
   } catch (error) {
     console.error("Preview Error:", error);
