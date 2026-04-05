@@ -1,19 +1,38 @@
 {
-    "compilerOptions": {
-        "target": "ES2020",
-        "module": "CommonJS",
-        "moduleResolution": "node",
-        "rootDir": "src",
-        "outDir": "dist",
-        "strict": true,
-        "esModuleInterop": true,
-        "skipLibCheck": true
-    },
-    "exclude": [
-        "node_modules",
-        "dist",
-        "jest.config.ts",
-        "**/*.test.ts",
-        "**/__tests__/**"
-    ]
+  "compilerOptions": {
+    /* 🔥 Basic Setup */
+    "target": "ES2020",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+
+    /* 📂 Paths */
+    "rootDir": "src",
+    "outDir": "dist",
+
+    /* ⚡ Strictness */
+    "strict": true,
+
+    /* 🔗 Interop */
+    "esModuleInterop": true,
+
+    /* 🚀 Performance */
+    "skipLibCheck": true,
+
+    /* 🧠 Node Support */
+    "types": ["node"],
+
+    /* 🔕 Fix Deprecation Warning */
+    "ignoreDeprecations": "6.0",
+
+    /* 🧾 Source Maps (debugging ke liye useful) */
+    "sourceMap": true
+  },
+
+  "exclude": [
+    "node_modules",
+    "dist",
+    "jest.config.ts",
+    "**/*.test.ts",
+    "**/__tests__/**"
+  ]
 }

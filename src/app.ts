@@ -58,21 +58,34 @@ app.post(
 );
 
 /* ===============================
-   2️⃣ GLOBAL MIDDLEWARES
+   2️⃣ 🔥 GLOBAL MIDDLEWARES (CORS FIX)
 ================================ */
 
-/*
-  ⭐ IMPORTANT FIX
-  React Native / Expo requests do not send normal origin.
-  Allow all origins safely for API usage.
-*/
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "https://www.studenote.co.in",
+  "https://studenote.co.in",
+];
 
 app.use(
   cors({
-    origin: true,
+    origin: function (origin, callback) {
+      // allow mobile apps / Postman (no origin)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        return callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   })
 );
+
+// 🔥 Preflight support
+app.options("*", cors());
 
 app.use(helmet());
 app.use(morgan("dev"));

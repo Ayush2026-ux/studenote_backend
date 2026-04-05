@@ -3,21 +3,26 @@ import mongoose from "mongoose";
 import User from "../../models/users/users.models";
 import Session from "../../models/users/session.model";
 import LoginActivity from "../../models/users/loginActivity.model";
+
 import {
   generateAccessToken,
   generateRefreshToken,
   generateAdminAccessToken,
   generateAdminRefreshToken,
 } from "../../utils/jwt";
+
 import { sendLoginAlertEmail } from "../../services/mail/loginAlert.mail";
 import { getLocationFromIp } from "../../utils/getLocationFromIp";
 import { getClientIp } from "../../utils/getClientIp";
 
 export const verifyOtpController = async (req: Request, res: Response) => {
   try {
+    console.log("🔐 VERIFY OTP REQUEST:", req.body);
+
     const { userId, otp, deviceName } = req.body;
 
     /* ================= VALIDATION ================= */
+
     if (!userId || !otp) {
       return res.status(400).json({
         success: false,
@@ -32,8 +37,11 @@ export const verifyOtpController = async (req: Request, res: Response) => {
       });
     }
 
-    /* ================= FIND USER (USER OR ADMIN) ================= */
-    const user = await User.findById(userId).select("+otp +otpExpiry");
+    /* ================= FIND USER ================= */
+
+    const user = await User.findById(userId).select(
+      "+otp +otpExpiry +otpAttempts"
+    );
 
     if (!user || !user.otp || !user.otpExpiry) {
       return res.status(400).json({
@@ -42,8 +50,20 @@ export const verifyOtpController = async (req: Request, res: Response) => {
       });
     }
 
+    /* ================= OTP ATTEMPT LIMIT ================= */
+
+    if ((user.otpAttempts || 0) >= 5) {
+      return res.status(429).json({
+        success: false,
+        message: "Too many OTP attempts. Request new OTP.",
+      });
+    }
+
     /* ================= OTP EXPIRY ================= */
+
     if (user.otpExpiry.getTime() < Date.now()) {
+      console.log("❌ OTP EXPIRED:", user.email);
+
       user.otp = undefined;
       user.otpExpiry = undefined;
       await user.save();
@@ -55,25 +75,34 @@ export const verifyOtpController = async (req: Request, res: Response) => {
     }
 
     /* ================= OTP MATCH ================= */
+
     if (String(user.otp).trim() !== String(otp).trim()) {
+      user.otpAttempts = (user.otpAttempts || 0) + 1;
+      await user.save();
+
+      console.log("❌ INVALID OTP:", user.email);
+
       return res.status(400).json({
         success: false,
         message: "Invalid OTP",
       });
     }
 
-    /* ================= CLEAR OTP (PREVENT REUSE) ================= */
+    /* ================= CLEAR OTP ================= */
+
     user.otp = undefined;
     user.otpExpiry = undefined;
     user.otpAttempts = 0;
     user.isEmailVerified = true;
     user.lastLoginAt = new Date();
 
-    /* ================= REAL IP ================= */
+    /* ================= IP ADDRESS ================= */
+
     const ipAddress = getClientIp(req);
     user.lastLoginIp = ipAddress;
 
-    /* ================= TOKENS (ROLE BASED) ================= */
+    /* ================= TOKENS ================= */
+
     const accessToken =
       user.role === "admin"
         ? generateAdminAccessToken({ userId: user._id.toString() })
@@ -86,42 +115,68 @@ export const verifyOtpController = async (req: Request, res: Response) => {
 
     await user.save();
 
-    /* ================= DEVICE & LOCATION ================= */
+    /* ================= DEVICE INFO ================= */
+
     const userAgent = req.headers["user-agent"] || "unknown";
     const device = deviceName || userAgent || "Unknown device";
-    const location = await getLocationFromIp(ipAddress);
 
-    /* ================= SESSION ================= */
-    await Session.create({
-      userId: user._id,
-      token: refreshToken,
-      ipAddress,
-      device,
-      userAgent,
-      location,
-      lastActiveAt: new Date(),
-      isRevoked: false,
-    });
+    /* ================= LOCATION SAFE ================= */
+
+    let location = "Unknown";
+
+    try {
+      location = await getLocationFromIp(ipAddress);
+    } catch (err) {
+      console.error("⚠️ LOCATION FETCH FAILED:", err);
+    }
+
+    /* ================= SESSION SAVE ================= */
+
+    try {
+      await Session.create({
+        userId: user._id,
+        token: refreshToken,
+        ipAddress,
+        device,
+        userAgent,
+        location,
+        lastActiveAt: new Date(),
+        isRevoked: false,
+      });
+    } catch (err) {
+      console.error("⚠️ SESSION SAVE FAILED:", err);
+    }
 
     /* ================= LOGIN ACTIVITY ================= */
-    await LoginActivity.create({
-      userId: user._id,
-      ipAddress,
-      device,
-      userAgent,
-    });
+
+    try {
+      await LoginActivity.create({
+        userId: user._id,
+        ipAddress,
+        device,
+        userAgent,
+      });
+    } catch (err) {
+      console.error("⚠️ LOGIN ACTIVITY FAILED:", err);
+    }
 
     /* ================= LOGIN ALERT ================= */
+
     if (user.loginAlertEnabled === true) {
       sendLoginAlertEmail({
         to: user.email,
         device,
         ip: ipAddress,
         time: new Date(),
-      }).catch((err) => console.error("LOGIN ALERT EMAIL FAILED:", err));
+      }).catch((err) =>
+        console.error("⚠️ LOGIN ALERT EMAIL FAILED:", err)
+      );
     }
 
+    console.log("✅ OTP VERIFIED SUCCESS:", user.email);
+
     /* ================= RESPONSE ================= */
+
     return res.status(200).json({
       success: true,
       message: "OTP verified successfully",
@@ -141,11 +196,15 @@ export const verifyOtpController = async (req: Request, res: Response) => {
         lastLoginIp: user.lastLoginIp,
       },
     });
+
   } catch (error: any) {
-    console.error("VERIFY OTP ERROR:", error);
+    console.error("❌ VERIFY OTP ERROR:", error);
+
     return res.status(500).json({
       success: false,
-      message: error?.message || "Internal server error during OTP verification",
+      message:
+        error?.message ||
+        "Internal server error during OTP verification",
     });
   }
 };
