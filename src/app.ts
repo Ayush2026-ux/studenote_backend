@@ -9,7 +9,6 @@ import { handleAllWebhooks } from "./controllers/payments/webhooks.controller";
 import { handlePayoutWebhook } from "./controllers/payments/payout.webhook";
 
 /* ROUTES */
-
 import authRoutes from "./routes/users/auth.routes";
 import uploadRoutes from "./routes/users/upload.routes";
 import home from "./routes/users/home.route";
@@ -58,7 +57,7 @@ app.post(
 );
 
 /* ===============================
-   2️⃣ 🔥 GLOBAL MIDDLEWARES (CORS FIX)
+   2️⃣ ✅ CORS FIX (FINAL)
 ================================ */
 
 const allowedOrigins = [
@@ -70,41 +69,40 @@ const allowedOrigins = [
 
 app.use(
   cors({
-    origin: function (origin, callback) {
-      // allow mobile apps / Postman (no origin)
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      } else {
-        return callback(new Error("Not allowed by CORS"));
-      }
-    },
+    origin: [
+      "http://localhost:3000",
+      "https://www.studenote.co.in",
+      "https://studenote.co.in",
+    ],
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "Cache-Control",
+      "Pragma",
+      "Expires"
+    ],
   })
 );
 
-// 🔥 Preflight support
-app.options("*", cors());
+// ✅ Proper preflight (NO manual handler)
+app.options("/", cors());
+
+/* ===============================
+   3️⃣ MIDDLEWARES
+================================ */
 
 app.use(helmet());
 app.use(morgan("dev"));
 
-/* ===============================
-   3️⃣ BODY PARSERS
-================================ */
-
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
-
-/* ===============================
-   4️⃣ TRUST PROXY
-================================ */
 
 app.set("trust proxy", true);
 
 /* ===============================
-   5️⃣ HEALTH CHECK
+   4️⃣ HEALTH CHECK
 ================================ */
 
 app.get("/", (_req, res) => {
@@ -119,7 +117,7 @@ app.get("/health", (_req, res) => {
 });
 
 /* ===============================
-   6️⃣ ROUTES
+   5️⃣ ROUTES
 ================================ */
 
 // Public
@@ -157,10 +155,7 @@ app.use("/api/earnings", earningsRoutes);
 // Support
 app.use("/api/support", supportRoutes);
 
-/* ===============================
-   PDF PREVIEW ROUTE
-================================ */
-
+// Utils
 app.use("/api", pdfViewerRoute);
 
 /* ===============================
@@ -170,7 +165,12 @@ app.use("/api", pdfViewerRoute);
 app.use("/public", express.static(path.join(__dirname, "../public")));
 
 /* ===============================
-   404 HANDLER
+   6️⃣ ❌ REMOVE "*" WILDCARD (IMPORTANT)
+================================ */
+// ❌ DO NOT USE app.use("*")
+
+/* ===============================
+   7️⃣ 404 HANDLER (SAFE)
 ================================ */
 
 app.use((_req, res) => {
@@ -181,7 +181,7 @@ app.use((_req, res) => {
 });
 
 /* ===============================
-   GLOBAL ERROR HANDLER
+   8️⃣ ERROR HANDLER
 ================================ */
 
 app.use((err: any, _req: any, res: any, _next: any) => {

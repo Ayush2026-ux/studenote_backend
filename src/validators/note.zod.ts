@@ -22,7 +22,7 @@ export const COURSE_IDS = [
     "class11",
     "class12",
 
-    "other",
+    "others",
 ] as const;
 
 export const SEMESTERS = [
