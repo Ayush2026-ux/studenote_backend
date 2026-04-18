@@ -52,16 +52,10 @@ export const getPublicNotes = async (req: AuthRequest, res: Response) => {
 
 export const previewNotePdf = async (req: AuthRequest, res: Response) => {
   try {
-    //console.log("---- PDF PREVIEW START ----");
-
     const noteId = req.params.id;
     const userId = req.user?._id;
 
-    //console.log("NOTE ID:", noteId);
-    //console.log("USER ID:", userId);
-
     if (!userId) {
-     // console.log("AUTH FAILED: req.user missing");
       return res.status(401).json({ message: "Unauthorized" });
     }
 
@@ -71,69 +65,53 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
       status: "paid",
     });
 
-   // console.log("HAS PURCHASED:", hasPurchased);
-
-    if (!hasPurchased) {
-     // console.log("PURCHASE CHECK FAILED");
-      return res.status(403).json({
-        message: "You have not purchased this note",
-      });
-    }
-
     const note = await NotesUpload.findById(noteId)
       .select("file")
       .lean();
 
-    //console.log("NOTE DB RESULT:", note);
-
     if (!note?.file) {
-      //console.log("FILE NOT FOUND IN DB");
       return res.status(404).json({
         message: "PDF not found",
       });
     }
 
-  //  console.log("S3 FILE KEY:", note.file);
-
     const signedUrl = await getS3SignedDownloadUrl(
       note.file,
-      60 * 5,
+      300,
       "application/pdf"
     );
 
     const pdfResponse = await axios.get(signedUrl, {
       responseType: "arraybuffer",
-      timeout: 30000,
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity,
-      validateStatus: (s: number) => s >= 200 && s < 300,
     });
 
-    // 🔥 FORCE INLINE VIEW (ANDROID DOWNLOAD MANAGER FIX)
+    /// 🔥 IMPORTANT HEADERS
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", 'inline; filename="note.pdf"');
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-    res.setHeader("Pragma", "no-cache");
-    res.setHeader("X-Content-Type-Options", "nosniff");
 
-    // 🔓 Purchased → Full PDF
+    /// 🔓 FULL PDF (purchased)
     if (hasPurchased) {
       return res.status(200).send(Buffer.from(pdfResponse.data));
     }
 
-    // 🔒 Not purchased → Preview (10 pages)
+    /// 🔒 PREVIEW (5 pages)
     const original = await PDFDocument.load(pdfResponse.data);
     const preview = await PDFDocument.create();
-    const pageCount = Math.min(10, original.getPageCount());
-    const pages = await preview.copyPages(original, Array.from({ length: pageCount }, (_, i) => i));
+
+    const pageCount = Math.min(5, original.getPageCount());
+
+    const pages = await preview.copyPages(
+      original,
+      Array.from({ length: pageCount }, (_, i) => i)
+    );
+
     pages.forEach((page) => preview.addPage(page));
+
     const previewBytes = await preview.save();
 
     return res.status(200).send(Buffer.from(previewBytes));
-
   } catch (err) {
-   // console.error("---- PREVIEW ERROR ----");
-    console.error(err);
+    console.error("PREVIEW ERROR:", err);
 
     return res.status(500).json({
       message: "Preview failed",
