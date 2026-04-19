@@ -100,7 +100,7 @@ app.use(
   })
 );
 
-app.options("*", cors());
+app.options("/*", cors());
 
 /* ===============================
    3️⃣ MIDDLEWARES
