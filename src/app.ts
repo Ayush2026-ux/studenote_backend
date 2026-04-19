@@ -4,6 +4,9 @@ import helmet from "helmet";
 import morgan from "morgan";
 import path from "path";
 
+/* 🔥 ADD THIS (IMPORTANT FIX) */
+import rateLimit from "express-rate-limit";
+
 import razorpayWebhookMiddleware from "./middlewares/razorpayWebhook.middleware";
 import { handleAllWebhooks } from "./controllers/payments/webhooks.controller";
 import { handlePayoutWebhook } from "./controllers/payments/payout.webhook";
@@ -39,6 +42,24 @@ import pdfViewerRoute from "./routes/utils/pdfViewer.route";
 const app = express();
 
 /* ===============================
+   🔥 FIX 1: TRUST PROXY (IMPORTANT)
+================================ */
+app.set("trust proxy", 1); // ❌ true → ✅ 1
+
+/* ===============================
+   🔥 FIX 2: RATE LIMIT SAFE
+================================ */
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+/* 🔥 APPLY LIMITER */
+app.use(limiter);
+
+/* ===============================
    1️⃣ WEBHOOKS (RAW BODY FIRST)
 ================================ */
 
@@ -57,15 +78,8 @@ app.post(
 );
 
 /* ===============================
-   2️⃣ ✅ CORS FIX (FINAL)
+   2️⃣ CORS
 ================================ */
-
-const allowedOrigins = [
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
-  "https://www.studenote.co.in",
-  "https://studenote.co.in",
-];
 
 app.use(
   cors({
@@ -81,13 +95,12 @@ app.use(
       "Authorization",
       "Cache-Control",
       "Pragma",
-      "Expires"
+      "Expires",
     ],
   })
 );
 
-// ✅ Proper preflight (NO manual handler)
-app.options("/", cors());
+app.options("*", cors());
 
 /* ===============================
    3️⃣ MIDDLEWARES
@@ -99,10 +112,8 @@ app.use(morgan("dev"));
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-app.set("trust proxy", true);
-
 /* ===============================
-   4️⃣ HEALTH CHECK
+   4️⃣ HEALTH
 ================================ */
 
 app.get("/", (_req, res) => {
@@ -159,18 +170,13 @@ app.use("/api/support", supportRoutes);
 app.use("/api", pdfViewerRoute);
 
 /* ===============================
-   STATIC FILES
+   STATIC
 ================================ */
 
 app.use("/public", express.static(path.join(__dirname, "../public")));
 
 /* ===============================
-   6️⃣ ❌ REMOVE "*" WILDCARD (IMPORTANT)
-================================ */
-// ❌ DO NOT USE app.use("*")
-
-/* ===============================
-   7️⃣ 404 HANDLER (SAFE)
+   404
 ================================ */
 
 app.use((_req, res) => {
@@ -181,7 +187,7 @@ app.use((_req, res) => {
 });
 
 /* ===============================
-   8️⃣ ERROR HANDLER
+   ERROR HANDLER
 ================================ */
 
 app.use((err: any, _req: any, res: any, _next: any) => {
