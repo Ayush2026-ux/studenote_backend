@@ -42,12 +42,12 @@ import pdfViewerRoute from "./routes/utils/pdfViewer.route";
 const app = express();
 
 /* ===============================
-   🔥 FIX 1: TRUST PROXY (IMPORTANT)
+   🔥 FIX 1: TRUST PROXY
 ================================ */
-app.set("trust proxy", 1); // ❌ true → ✅ 1
+app.set("trust proxy", 1);
 
 /* ===============================
-   🔥 FIX 2: RATE LIMIT SAFE
+   🔥 FIX 2: RATE LIMIT
 ================================ */
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -56,7 +56,6 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 
-/* 🔥 APPLY LIMITER */
 app.use(limiter);
 
 /* ===============================
@@ -78,7 +77,7 @@ app.post(
 );
 
 /* ===============================
-   2️⃣ CORS
+   2️⃣ ✅ CORS (FIXED)
 ================================ */
 
 app.use(
@@ -100,7 +99,8 @@ app.use(
   })
 );
 
-app.options("/*", cors());
+/* ❌ REMOVE THIS LINE (CRASH FIX) */
+// app.options("/*", cors());
 
 /* ===============================
    3️⃣ MIDDLEWARES
@@ -113,7 +113,7 @@ app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 /* ===============================
-   4️⃣ HEALTH
+   4️⃣ HEALTH CHECK
 ================================ */
 
 app.get("/", (_req, res) => {
@@ -170,13 +170,13 @@ app.use("/api/support", supportRoutes);
 app.use("/api", pdfViewerRoute);
 
 /* ===============================
-   STATIC
+   STATIC FILES
 ================================ */
 
 app.use("/public", express.static(path.join(__dirname, "../public")));
 
 /* ===============================
-   404
+   404 HANDLER
 ================================ */
 
 app.use((_req, res) => {
