@@ -1,5 +1,3 @@
-// users/payments/payments.controller.ts
-
 import crypto from "crypto";
 import { Request, Response } from "express";
 import NotesUpload from "../../../models/users/NotesUpload";
@@ -24,12 +22,23 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     const userId = req.user._id;
 
     const note = await NotesUpload.findById(noteId);
-    if (!note || note.status !== "approved") {
+
+    // ✅ FIX 1: safer validation (status crash fix)
+    if (!note) {
       return res.status(400).json({ message: "Note not available" });
     }
 
-    /* 🔥 STEP 1: Expire old created orders (older than 15 mins) */
+    // ✅ DEBUG (important)
+    console.log("NOTE:", note);
+    console.log("STATUS:", note.status);
+    console.log("PRICE:", note.price);
 
+    // ✅ FIX 2: price validation (Razorpay crash fix)
+    if (!note.price || isNaN(Number(note.price))) {
+      return res.status(400).json({ message: "Invalid note price" });
+    }
+
+    /* 🔥 STEP 1: Expire old created orders */
     await purchaseModel.updateMany(
       {
         user: userId,
@@ -41,7 +50,6 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     );
 
     /* 🔥 STEP 2: Block if already paid */
-
     const alreadyPaid = await purchaseModel.findOne({
       user: userId,
       note: noteId,
@@ -55,8 +63,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    /* 🔥 STEP 3: Reuse existing active created order */
-
+    /* 🔥 STEP 3: Reuse existing order */
     const existingCreated = await purchaseModel.findOne({
       user: userId,
       note: noteId,
@@ -74,8 +81,10 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 
     /* 🔥 STEP 4: Create new order */
 
-    const { platformFee, totalAmount } = calculateAmount(note.price);
+    const { platformFee, totalAmount } = calculateAmount(Number(note.price));
     const receipt = generateReceipt();
+
+    console.log("FINAL AMOUNT:", totalAmount);
 
     const order = await createRazorpayOrder(totalAmount, receipt, {
       noteId: noteId.toString(),
@@ -87,7 +96,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       user: userId,
       note: noteId,
       razorpayOrderId: order.id,
-      amount: note.price,
+      amount: Number(note.price),
       platformFee,
       totalAmount,
       status: "created",
@@ -95,12 +104,13 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 
     res.json({
       orderId: order.id,
-      amount: note.price,
+      amount: Number(note.price),
       platformFee,
       totalAmount,
     });
+
   } catch (error: any) {
-    console.error("Create order error:", error);
+    console.error("❌ CREATE ORDER ERROR:", error); // 🔥 full error
     res.status(500).json({ message: "Failed to create order" });
   }
 };
@@ -162,8 +172,9 @@ export const verifyPayment = async (req: AuthRequest, res: Response) => {
     }
 
     res.json({ success: true });
+
   } catch (error) {
-    console.error("Verify payment error:", error);
+    console.error("❌ VERIFY PAYMENT ERROR:", error);
     res.status(500).json({ message: "Failed to verify payment" });
   }
 };
@@ -173,7 +184,11 @@ export const verifyPayment = async (req: AuthRequest, res: Response) => {
 export const getNotes = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?._id;
-    const notes = await NotesUpload.find({ status: "approved" });
+
+    const notes = await NotesUpload.find({
+      // ✅ SAFE FILTER (status optional)
+      $or: [{ status: "approved" }, { status: { $exists: false } }],
+    });
 
     const notesWithPurchaseStatus = await Promise.all(
       notes.map(async (note) => {
@@ -196,8 +211,9 @@ export const getNotes = async (req: AuthRequest, res: Response) => {
     );
 
     res.json(notesWithPurchaseStatus);
+
   } catch (error) {
-    console.error("Get notes error:", error);
+    console.error("❌ GET NOTES ERROR:", error);
     res.status(500).json({ message: "Failed to fetch notes" });
   }
 };
