@@ -1,4 +1,6 @@
 import { Request, Response } from "express";
+import axios from "axios";
+import { PDFDocument } from "pdf-lib";
 import NotesUpload from "../../models/users/NotesUpload";
 import Purchase from "../../models/payments/purchase.model";
 import { getS3SignedDownloadUrl } from "../../services/users/uploadnots.services";
@@ -19,7 +21,10 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const note = await NotesUpload.findById(noteId).select("file uploadedBy").lean();
+    // 🔎 Get note
+    const note = await NotesUpload.findById(noteId)
+      .select("file uploadedBy")
+      .lean();
 
     if (!note?.file) {
       return res.status(404).json({
@@ -28,35 +33,58 @@ export const previewNotePdf = async (req: AuthRequest, res: Response) => {
       });
     }
 
+    // 🔐 Check access (owner or purchased)
     let isBought = false;
 
-    // Check if user is the author
     if (note.uploadedBy?.toString() === userId.toString()) {
       isBought = true;
     } else {
-      // Check if user has purchased the note
       const purchase = await Purchase.findOne({
         user: userId,
         note: noteId,
-        status: "paid"
+        status: "paid",
       });
 
-      if (purchase) {
-        isBought = true;
-      }
+      if (purchase) isBought = true;
     }
 
+    // 🔗 Get signed URL from S3
     const signedUrl = await getS3SignedDownloadUrl(
       note.file,
       900,
       "application/pdf"
     );
 
-    return res.status(200).json({
-      success: true,
-      url: signedUrl,
-      isBought,
+    // 📥 Fetch PDF as buffer
+    const pdfResponse = await axios.get(signedUrl, {
+      responseType: "arraybuffer",
     });
+
+    // 🔥 Important headers
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'inline; filename="note.pdf"');
+
+    // ✅ If bought → full PDF
+    if (isBought) {
+      return res.status(200).send(Buffer.from(pdfResponse.data));
+    }
+
+    // 🔒 Else → preview (first 5 pages)
+    const original = await PDFDocument.load(pdfResponse.data);
+    const preview = await PDFDocument.create();
+
+    const pageCount = Math.min(5, original.getPageCount());
+
+    const pages = await preview.copyPages(
+      original,
+      Array.from({ length: pageCount }, (_, i) => i)
+    );
+
+    pages.forEach((page) => preview.addPage(page));
+
+    const previewBytes = await preview.save();
+
+    return res.status(200).send(Buffer.from(previewBytes));
   } catch (error) {
     console.error("Preview Error:", error);
 
