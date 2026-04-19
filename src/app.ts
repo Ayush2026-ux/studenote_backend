@@ -175,6 +175,12 @@ app.use("/api", pdfViewerRoute);
 
 app.use("/public", express.static(path.join(__dirname, "../public")));
 
+/// 🔥 THUMBNAIL FIX (ONLY THIS ADDED)
+app.use(
+  "/thumbnails",
+  express.static(path.join(__dirname, "../uploads/thumbnails"))
+);
+
 /* ===============================
    404 HANDLER
 ================================ */
