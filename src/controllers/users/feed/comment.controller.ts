@@ -227,6 +227,10 @@ export const deleteComment = async (req: Request, res: Response) => {
 export const getCommentsByFeed = async (req: Request, res: Response) => {
     const { feed } = req.query;
 
+    const userId =
+        (req as any).user?.id ||
+        (req as any).user?._id;
+
     if (!feed || !mongoose.Types.ObjectId.isValid(feed as string)) {
         return res.status(400).json({
             success: false,
@@ -239,13 +243,23 @@ export const getCommentsByFeed = async (req: Request, res: Response) => {
             feed,
             isDeleted: false,
         })
-            .populate("author", "fullName avatar")
+            .populate("author", "fullName username avatar")
             .sort({ createdAt: 1 })
             .lean();
 
+        /* 🔥 MAIN FIX */
+        const finalComments = comments.map((c: any) => ({
+            ...c,
+            likedByMe: userId
+                ? (c.likedBy || [])
+                      .map((id: any) => String(id))
+                      .includes(String(userId))
+                : false,
+        }));
+
         return res.json({
             success: true,
-            data: comments,
+            data: finalComments,
         });
     } catch (error) {
         console.error("GET_COMMENTS_ERROR:", error);
