@@ -75,7 +75,6 @@ export const getFeeds = async (req: Request, res: Response) => {
         const limit = Math.min(Number(req.query.limit) || 10, 10);
         const userId = (req as any)?.user?.id;
 
-        /* ================= PARSE seenIds ================= */
         const seenIdsRaw = req.query.seenIds
             ? decodeURIComponent(req.query.seenIds as string)
                 .split(",")
@@ -88,71 +87,34 @@ export const getFeeds = async (req: Request, res: Response) => {
             (id) => new mongoose.Types.ObjectId(id)
         );
 
-        /* ================= BUILD QUERY ================= */
         const query: any = { isActive: true, visibility: "public" };
         if (seenIds.length) query._id = { $nin: seenIds };
 
-        /* ================= FETCH FEEDS ================= */
         const feeds = await Feed.find(query)
             .sort({ score: -1, createdAt: -1 })
             .limit(limit)
             .select("author note likes views commentsCount shareCount score createdAt")
-            .populate("author", "fullName avatar")
+            .populate("author", "fullName username avatar") // ✅ FIXED
             .populate("note", "title course description thumbnail price file")
             .lean();
 
-        if (feeds.length === 0) {
-            res.setHeader("Cache-Control", "no-store");
-            return res.json({
-                success: true,
-                data: feeds,
-                message: seenIds.length > 0 ? "No more feeds available" : "No feeds found",
-            });
+        if (!feeds.length) {
+            return res.json({ success: true, data: [] });
         }
 
-        /* ================= ANON USER ================= */
         if (!userId) {
-            // Attach signed URLs for anon users too (optional)
-            const feedsWithUrls = await Promise.all(
-                feeds.map(async (feed: any) => {
-                    if (feed.note?.thumbnail) {
-                        feed.note.thumbnailUrl = await getS3SignedDownloadUrl(
-                            feed.note.thumbnail,
-                            60 * 60
-                        );
-                    }
-                    if (feed.note?.file) {
-                        feed.note.fileUrl = await getS3SignedDownloadUrl(
-                            feed.note.file,
-                            60 * 10
-                        );
-                    }
-                    return feed;
-                })
-            );
-
-            res.setHeader("Cache-Control", "no-store");
-            return res.json({ success: true, data: feedsWithUrls });
+            return res.json({ success: true, data: feeds });
         }
 
-        /* ================= USER META ================= */
         const feedIds = feeds.map((f) => f._id);
         const noteIds = feeds.map((f) => f.note?._id).filter(Boolean);
         const authorIds = feeds.map((f) => f.author?._id).filter(Boolean);
 
         const [likes, saves, purchases, follows] = await Promise.all([
-            FeedLike.find({ user: userId, feed: { $in: feedIds } })
-                .select("feed")
-                .lean(),
-            SavedFeed.find({ user: userId, feed: { $in: feedIds } })
-                .select("feed")
-                .lean(),
-            Purchase.find({ user: userId, note: { $in: noteIds }, status: "paid" })
-                .select("note")
-                .lean(),
-            Follow.find({ follower: userId, following: { $in: authorIds } })
-                .select("following")
-                .lean(),
+            FeedLike.find({ user: userId, feed: { $in: feedIds } }).select("feed").lean(),
+            SavedFeed.find({ user: userId, feed: { $in: feedIds } }).select("feed").lean(),
+            Purchase.find({ user: userId, note: { $in: noteIds }, status: "paid" }).select("note").lean(),
+            Follow.find({ follower: userId, following: { $in: authorIds } }).select("following").lean(),
         ]);
 
         const likedSet = new Set(likes.map((l: any) => String(l.feed)));
@@ -160,36 +122,31 @@ export const getFeeds = async (req: Request, res: Response) => {
         const purchasedSet = new Set(purchases.map((p: any) => String(p.note)));
         const followingSet = new Set(follows.map((f: any) => String(f.following)));
 
-        /* ================= ATTACH S3 URLS ================= */
-        const feedsWithUrls = await Promise.all(
-            feeds.map(async (feed: any) => {
-                if (feed.note?.thumbnail) {
-                    feed.note.thumbnailUrl = await getS3SignedDownloadUrl(
-                        feed.note.thumbnail,
-                        60 * 60 // 1 hour
-                    );
-                }
-                if (feed.note?.file) {
-                    feed.note.fileUrl = await getS3SignedDownloadUrl(
-                        feed.note.file,
-                        60 * 10 // 10 minutes - short-lived for files
-                    );
-                }
-                return feed;
-            })
-        );
-
-        /* ================= FINAL SHAPE ================= */
-        const finalFeeds = feedsWithUrls.map((feed: any) => ({
+        const finalFeeds = feeds.map((feed: any) => ({
             ...feed,
+
+            /// 🔥 ORIGINAL KEYS
             likedByMe: likedSet.has(String(feed._id)),
             savedByMe: savedSet.has(String(feed._id)),
-            isPurchased: purchasedSet.has(String(feed.note?._id)),
             isFollowingAuthor: followingSet.has(String(feed.author?._id)),
+
+            /// 🔥 FRONTEND SAFE KEYS (IMPORTANT)
+            isLiked: likedSet.has(String(feed._id)),
+            isSaved: savedSet.has(String(feed._id)),
+            isFollowing: followingSet.has(String(feed.author?._id)),
+
+            /// 🔥 SELF CHECK
+            currentUserId: userId,
+
+            /// extra
+            isPurchased: purchasedSet.has(String(feed.note?._id)),
         }));
 
-        res.setHeader("Cache-Control", "no-store");
-        return res.json({ success: true, data: finalFeeds });
+        return res.json({
+            success: true,
+            data: finalFeeds,
+        });
+
     } catch (error) {
         console.error("GET_FEEDS_ERROR:", error);
         return res.status(500).json({
