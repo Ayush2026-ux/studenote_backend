@@ -75,12 +75,16 @@ export const getFeeds = async (req: Request, res: Response) => {
         const limit = Math.min(Number(req.query.limit) || 10, 10);
         const userId = (req as any)?.user?.id;
 
+        const BASE_URL =
+            process.env.BASE_URL ||
+            "https://studenotebackend-production-bedb.up.railway.app";
+
         const seenIdsRaw = req.query.seenIds
             ? decodeURIComponent(req.query.seenIds as string)
-                .split(",")
-                .map((id) => id.trim())
-                .filter((id) => mongoose.Types.ObjectId.isValid(id))
-                .slice(-50)
+                  .split(",")
+                  .map((id) => id.trim())
+                  .filter((id) => mongoose.Types.ObjectId.isValid(id))
+                  .slice(-50)
             : [];
 
         const seenIds = Array.from(new Set(seenIdsRaw)).map(
@@ -93,14 +97,45 @@ export const getFeeds = async (req: Request, res: Response) => {
         const feeds = await Feed.find(query)
             .sort({ score: -1, createdAt: -1 })
             .limit(limit)
-            .select("author note likes views commentsCount shareCount score createdAt")
-            .populate("author", "fullName username avatar") // ✅ FIXED
-            .populate("note", "title course description thumbnail price file")
+            .select(
+                "author note likes views commentsCount shareCount score createdAt"
+            )
+            .populate("author", "fullName username avatar")
+            .populate(
+                "note",
+                "title course description thumbnail price file"
+            )
             .lean();
 
         if (!feeds.length) {
             return res.json({ success: true, data: [] });
         }
+
+        /* ======================================================
+           🔥 THUMBNAIL FIX (MAIN FIX)
+        ====================================================== */
+
+        for (const feed of feeds) {
+            if (feed.note?.thumbnail) {
+                try {
+                    // ✅ try S3 signed URL
+                    feed.note.thumbnailUrl =
+                        await getS3SignedDownloadUrl(
+                            feed.note.thumbnail,
+                            60 * 60
+                        );
+                } catch (e) {
+                    console.error("THUMBNAIL ERROR:", e);
+
+                    // ✅ fallback (IMPORTANT)
+                    feed.note.thumbnailUrl = `${BASE_URL}/${feed.note.thumbnail}`;
+                }
+            }
+        }
+
+        /* ======================================================
+           USER DATA
+        ====================================================== */
 
         if (!userId) {
             return res.json({ success: true, data: feeds });
@@ -111,42 +146,75 @@ export const getFeeds = async (req: Request, res: Response) => {
         const authorIds = feeds.map((f) => f.author?._id).filter(Boolean);
 
         const [likes, saves, purchases, follows] = await Promise.all([
-            FeedLike.find({ user: userId, feed: { $in: feedIds } }).select("feed").lean(),
-            SavedFeed.find({ user: userId, feed: { $in: feedIds } }).select("feed").lean(),
-            Purchase.find({ user: userId, note: { $in: noteIds }, status: "paid" }).select("note").lean(),
-            Follow.find({ follower: userId, following: { $in: authorIds } }).select("following").lean(),
+            FeedLike.find({
+                user: userId,
+                feed: { $in: feedIds },
+            })
+                .select("feed")
+                .lean(),
+
+            SavedFeed.find({
+                user: userId,
+                feed: { $in: feedIds },
+            })
+                .select("feed")
+                .lean(),
+
+            Purchase.find({
+                user: userId,
+                note: { $in: noteIds },
+                status: "paid",
+            })
+                .select("note")
+                .lean(),
+
+            Follow.find({
+                follower: userId,
+                following: { $in: authorIds },
+            })
+                .select("following")
+                .lean(),
         ]);
 
-        const likedSet = new Set(likes.map((l: any) => String(l.feed)));
-        const savedSet = new Set(saves.map((s: any) => String(s.feed)));
-        const purchasedSet = new Set(purchases.map((p: any) => String(p.note)));
-        const followingSet = new Set(follows.map((f: any) => String(f.following)));
+        const likedSet = new Set(
+            likes.map((l: any) => String(l.feed))
+        );
+        const savedSet = new Set(
+            saves.map((s: any) => String(s.feed))
+        );
+        const purchasedSet = new Set(
+            purchases.map((p: any) => String(p.note))
+        );
+        const followingSet = new Set(
+            follows.map((f: any) => String(f.following))
+        );
 
         const finalFeeds = feeds.map((feed: any) => ({
             ...feed,
 
-            /// 🔥 ORIGINAL KEYS
             likedByMe: likedSet.has(String(feed._id)),
             savedByMe: savedSet.has(String(feed._id)),
-            isFollowingAuthor: followingSet.has(String(feed.author?._id)),
+            isFollowingAuthor: followingSet.has(
+                String(feed.author?._id)
+            ),
 
-            /// 🔥 FRONTEND SAFE KEYS (IMPORTANT)
             isLiked: likedSet.has(String(feed._id)),
             isSaved: savedSet.has(String(feed._id)),
-            isFollowing: followingSet.has(String(feed.author?._id)),
+            isFollowing: followingSet.has(
+                String(feed.author?._id)
+            ),
 
-            /// 🔥 SELF CHECK
             currentUserId: userId,
 
-            /// extra
-            isPurchased: purchasedSet.has(String(feed.note?._id)),
+            isPurchased: purchasedSet.has(
+                String(feed.note?._id)
+            ),
         }));
 
         return res.json({
             success: true,
             data: finalFeeds,
         });
-
     } catch (error) {
         console.error("GET_FEEDS_ERROR:", error);
         return res.status(500).json({
