@@ -271,7 +271,13 @@ export const shareFeed = async (req: Request, res: Response) => {
         queueFeedScoreUpdate(feedId);
 
         await session.commitTransaction();
-        return res.json({ success: true });
+
+        /// 🔥 THIS IS THE FIX
+        return res.json({
+            success: true,
+            link: `https://studenote.co.in/feed/${feedId}`
+        });
+
     } catch (error) {
         await session.abortTransaction();
         console.error("SHARE_FEED_ERROR:", error);

@@ -2,18 +2,17 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import Follow from "../../../models/users/follow.module";
 import Notification from "../../../models/users/notification.models";
-import { followUserSchema } from "../../../validators/follow.zod";
 import User from "../../../models/users/users.models";
 
 /* ======================================================
-   FOLLOW USER (SCALE SAFE)
+   🔥 TOGGLE FOLLOW (FOLLOW + UNFOLLOW IN ONE)
 ====================================================== */
 
-export const followUser = async (req: Request, res: Response) => {
+export const toggleFollowUser = async (req: Request, res: Response) => {
     const followerId = (req as any).user.id;
     const followingId = req.params.userId;
 
-    // Prevent self-follow
+    // ❌ prevent self follow
     if (followerId === followingId) {
         return res.status(400).json({
             success: false,
@@ -21,35 +20,50 @@ export const followUser = async (req: Request, res: Response) => {
         });
     }
 
-    const parsed = followUserSchema.safeParse({
-        follower: followerId,
-        following: followingId,
-    });
-
-    if (!parsed.success) {
-        return res.status(400).json({
-            success: false,
-            message: parsed.error.issues[0].message,
-        });
-    }
-
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-        // Idempotency check
-        const alreadyFollowing = await Follow.exists(
-            parsed.data
-        );
+        const existing = await Follow.findOne({
+            follower: followerId,
+            following: followingId,
+        }).session(session);
 
-        if (alreadyFollowing) {
-            await session.abortTransaction();
-            return res.json({ success: true, following: true });
+        /* ================= UNFOLLOW ================= */
+        if (existing) {
+            await Follow.deleteOne({ _id: existing._id }, { session });
+
+            await User.updateOne(
+                { _id: followerId },
+                { $inc: { followingCount: -1 } },
+                { session }
+            );
+
+            await User.updateOne(
+                { _id: followingId },
+                { $inc: { followersCount: -1 } },
+                { session }
+            );
+
+            await session.commitTransaction();
+
+            return res.json({
+                success: true,
+                following: false,
+            });
         }
 
-        await Follow.create([parsed.data], { session });
+        /* ================= FOLLOW ================= */
+        await Follow.create(
+            [
+                {
+                    follower: followerId,
+                    following: followingId,
+                },
+            ],
+            { session }
+        );
 
-        // Update counters (CRITICAL for scale)
         await User.updateOne(
             { _id: followerId },
             { $inc: { followingCount: 1 } },
@@ -62,7 +76,7 @@ export const followUser = async (req: Request, res: Response) => {
             { session }
         );
 
-        // Notification (async-safe)
+        // 🔔 Notification (no duplicate)
         await Notification.updateOne(
             {
                 recipient: followingId,
@@ -82,80 +96,23 @@ export const followUser = async (req: Request, res: Response) => {
 
         await session.commitTransaction();
 
-        res.status(201).json({
+        return res.json({
             success: true,
             following: true,
         });
+
     } catch (error) {
         await session.abortTransaction();
-        console.error("FOLLOW_USER_ERROR:", error);
+        console.error("TOGGLE_FOLLOW_ERROR:", error);
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            message: "Unable to follow user",
+            message: "Unable to toggle follow",
         });
     } finally {
         session.endSession();
     }
 };
-
-/* ======================================================
-   UNFOLLOW USER (SCALE SAFE)
-====================================================== */
-
-export const unfollowUser = async (req: Request, res: Response) => {
-    const followerId = (req as any).user.id;
-    const followingId = req.params.userId;
-
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
-    try {
-        const deleted = await Follow.findOneAndDelete(
-            {
-                follower: followerId,
-                following: followingId,
-            },
-            { session }
-        );
-
-        // Idempotent unfollow
-        if (!deleted) {
-            await session.abortTransaction();
-            return res.json({ success: true, following: false });
-        }
-
-        await User.updateOne(
-            { _id: followerId },
-            { $inc: { followingCount: -1 } },
-            { session }
-        );
-
-        await User.updateOne(
-            { _id: followingId },
-            { $inc: { followersCount: -1 } },
-            { session }
-        );
-
-        await session.commitTransaction();
-
-        res.json({
-            success: true,
-            following: false,
-        });
-    } catch (error) {
-        await session.abortTransaction();
-        console.error("UNFOLLOW_USER_ERROR:", error);
-
-        res.status(500).json({
-            success: false,
-            message: "Unable to unfollow user",
-        });
-    } finally {
-        session.endSession();
-    }
-};
-
 
 /* ======================================================
    CHECK IF USER IS FOLLOWING
@@ -171,25 +128,28 @@ export const isFollowingUser = async (req: Request, res: Response) => {
             following: followingId,
         });
 
-        res.json({
+        return res.json({
             success: true,
             following: !!exists,
         });
     } catch (error) {
         console.error("IS_FOLLOWING_ERROR:", error);
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message: "Unable to check follow status",
         });
     }
 };
 
-
+/* ======================================================
+   FOLLOW STATUS (SMART STATUS)
+====================================================== */
 
 export const getFollowStatus = async (req: Request, res: Response) => {
     const currentUserId = (req as any).user.id;
     const targetUserId = req.params.userId;
 
+    // self check
     if (currentUserId === targetUserId) {
         return res.json({
             success: true,
@@ -219,15 +179,16 @@ export const getFollowStatus = async (req: Request, res: Response) => {
             status = "follow";
         }
 
-        res.json({
+        return res.json({
             success: true,
             following: !!isFollowing,
             followedBy: !!isFollowedBy,
             status,
         });
+
     } catch (error) {
         console.error("FOLLOW_STATUS_ERROR:", error);
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message: "Unable to get follow status",
         });

@@ -15,19 +15,27 @@ const objectId = z
 export const createCommentSchema = z
     .object({
         feed: objectId,
-        note: objectId.optional(), // ✅ optional (fixes 400)
+        note: objectId.optional(),
         author: objectId,
 
-        content: z
-            .string()
-            .trim()
-            .min(1, "Comment cannot be empty")
-            .max(500, "Comment cannot exceed 500 characters"),
+        /// 🔥 FLEXIBLE INPUT (FIX)
+        content: z.string().trim().min(1).max(500).optional(),
+        text: z.string().trim().min(1).max(500).optional(),
 
         parentComment: objectId.optional().nullable(),
     })
-    .transform(data => ({
+    .refine(
+        (data) => data.content || data.text,
+        {
+            message: "Comment cannot be empty",
+        }
+    )
+    .transform((data) => ({
         ...data,
+
+        /// 🔥 NORMALIZE TO content
+        content: data.content ?? data.text,
+
         parentComment: data.parentComment ?? undefined,
     }));
 
