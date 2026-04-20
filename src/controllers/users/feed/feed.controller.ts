@@ -79,6 +79,10 @@ export const getFeeds = async (req: Request, res: Response) => {
             process.env.BASE_URL ||
             "https://studenotebackend-production-bedb.up.railway.app";
 
+        const DEFAULT_THUMBNAIL =
+            "https://via.placeholder.com/400x200?text=No+Preview";
+
+        /* ================= PARSE seenIds ================= */
         const seenIdsRaw = req.query.seenIds
             ? decodeURIComponent(req.query.seenIds as string)
                   .split(",")
@@ -91,9 +95,11 @@ export const getFeeds = async (req: Request, res: Response) => {
             (id) => new mongoose.Types.ObjectId(id)
         );
 
+        /* ================= QUERY ================= */
         const query: any = { isActive: true, visibility: "public" };
         if (seenIds.length) query._id = { $nin: seenIds };
 
+        /* ================= FETCH ================= */
         const feeds = await Feed.find(query)
             .sort({ score: -1, createdAt: -1 })
             .limit(limit)
@@ -112,29 +118,49 @@ export const getFeeds = async (req: Request, res: Response) => {
         }
 
         /* ======================================================
-           🔥 THUMBNAIL FIX (MAIN FIX)
+           🔥 THUMBNAIL + FILE FIX (TS SAFE)
         ====================================================== */
 
-        for (const feed of feeds) {
-            if (feed.note?.thumbnail) {
+        for (const feed of feeds as any[]) {
+            const note = feed.note as any;
+
+            if (note?.thumbnail) {
                 try {
-                    // ✅ try S3 signed URL
-                    feed.note.thumbnailUrl =
+                    // ✅ S3 TRY
+                    note.thumbnailUrl =
                         await getS3SignedDownloadUrl(
-                            feed.note.thumbnail,
+                            note.thumbnail,
                             60 * 60
                         );
                 } catch (e) {
                     console.error("THUMBNAIL ERROR:", e);
 
-                    // ✅ fallback (IMPORTANT)
-                    feed.note.thumbnailUrl = `${BASE_URL}/${feed.note.thumbnail}`;
+                    // ✅ FALLBACK LOCAL
+                    note.thumbnailUrl =
+                        `${BASE_URL}/${note.thumbnail}`;
+                }
+            } else {
+                // ✅ DEFAULT (NO CRASH EVER)
+                note.thumbnailUrl = DEFAULT_THUMBNAIL;
+            }
+
+            /// 📄 FILE FIX
+            if (note?.file) {
+                try {
+                    note.fileUrl =
+                        await getS3SignedDownloadUrl(
+                            note.file,
+                            60 * 10
+                        );
+                } catch (e) {
+                    note.fileUrl =
+                        `${BASE_URL}/${note.file}`;
                 }
             }
         }
 
         /* ======================================================
-           USER DATA
+           USER META
         ====================================================== */
 
         if (!userId) {
@@ -149,31 +175,23 @@ export const getFeeds = async (req: Request, res: Response) => {
             FeedLike.find({
                 user: userId,
                 feed: { $in: feedIds },
-            })
-                .select("feed")
-                .lean(),
+            }).select("feed").lean(),
 
             SavedFeed.find({
                 user: userId,
                 feed: { $in: feedIds },
-            })
-                .select("feed")
-                .lean(),
+            }).select("feed").lean(),
 
             Purchase.find({
                 user: userId,
                 note: { $in: noteIds },
                 status: "paid",
-            })
-                .select("note")
-                .lean(),
+            }).select("note").lean(),
 
             Follow.find({
                 follower: userId,
                 following: { $in: authorIds },
-            })
-                .select("following")
-                .lean(),
+            }).select("following").lean(),
         ]);
 
         const likedSet = new Set(
@@ -188,6 +206,8 @@ export const getFeeds = async (req: Request, res: Response) => {
         const followingSet = new Set(
             follows.map((f: any) => String(f.following))
         );
+
+        /* ================= FINAL ================= */
 
         const finalFeeds = feeds.map((feed: any) => ({
             ...feed,
@@ -339,13 +359,7 @@ export const shareFeed = async (req: Request, res: Response) => {
         queueFeedScoreUpdate(feedId);
 
         await session.commitTransaction();
-
-        /// 🔥 THIS IS THE FIX
-        return res.json({
-            success: true,
-            link: `https://studenote.co.in/feed/${feedId}`
-        });
-
+        return res.json({ success: true });
     } catch (error) {
         await session.abortTransaction();
         console.error("SHARE_FEED_ERROR:", error);
