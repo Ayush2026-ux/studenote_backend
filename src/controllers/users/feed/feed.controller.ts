@@ -73,7 +73,9 @@ export const createFeed = async (req: Request, res: Response) => {
 export const getFeeds = async (req: Request, res: Response) => {
     try {
         const limit = Math.min(Number(req.query.limit) || 10, 10);
-        const userId = (req as any)?.user?.id;
+
+        /// 🔥 FIXED (MAIN BUG)
+        const userId = (req as any)?.user?._id;
 
         const BASE_URL =
             process.env.BASE_URL ||
@@ -82,7 +84,6 @@ export const getFeeds = async (req: Request, res: Response) => {
         const DEFAULT_THUMBNAIL =
             "https://via.placeholder.com/400x200?text=No+Preview";
 
-        /* ================= PARSE seenIds ================= */
         const seenIdsRaw = req.query.seenIds
             ? decodeURIComponent(req.query.seenIds as string)
                   .split(",")
@@ -95,11 +96,9 @@ export const getFeeds = async (req: Request, res: Response) => {
             (id) => new mongoose.Types.ObjectId(id)
         );
 
-        /* ================= QUERY ================= */
         const query: any = { isActive: true, visibility: "public" };
         if (seenIds.length) query._id = { $nin: seenIds };
 
-        /* ================= FETCH ================= */
         const feeds = await Feed.find(query)
             .sort({ score: -1, createdAt: -1 })
             .limit(limit)
@@ -117,34 +116,24 @@ export const getFeeds = async (req: Request, res: Response) => {
             return res.json({ success: true, data: [] });
         }
 
-        /* ======================================================
-           🔥 THUMBNAIL + FILE FIX (TS SAFE)
-        ====================================================== */
-
         for (const feed of feeds as any[]) {
             const note = feed.note as any;
 
             if (note?.thumbnail) {
                 try {
-                    // ✅ S3 TRY
                     note.thumbnailUrl =
                         await getS3SignedDownloadUrl(
                             note.thumbnail,
                             60 * 60
                         );
-                } catch (e) {
-                    console.error("THUMBNAIL ERROR:", e);
-
-                    // ✅ FALLBACK LOCAL
+                } catch {
                     note.thumbnailUrl =
                         `${BASE_URL}/${note.thumbnail}`;
                 }
             } else {
-                // ✅ DEFAULT (NO CRASH EVER)
                 note.thumbnailUrl = DEFAULT_THUMBNAIL;
             }
 
-            /// 📄 FILE FIX
             if (note?.file) {
                 try {
                     note.fileUrl =
@@ -152,17 +141,14 @@ export const getFeeds = async (req: Request, res: Response) => {
                             note.file,
                             60 * 10
                         );
-                } catch (e) {
+                } catch {
                     note.fileUrl =
                         `${BASE_URL}/${note.file}`;
                 }
             }
         }
 
-        /* ======================================================
-           USER META
-        ====================================================== */
-
+        /// 🔥 USER META FIXED
         if (!userId) {
             return res.json({ success: true, data: feeds });
         }
@@ -207,8 +193,6 @@ export const getFeeds = async (req: Request, res: Response) => {
             follows.map((f: any) => String(f.following))
         );
 
-        /* ================= FINAL ================= */
-
         const finalFeeds = feeds.map((feed: any) => ({
             ...feed,
 
@@ -224,7 +208,7 @@ export const getFeeds = async (req: Request, res: Response) => {
                 String(feed.author?._id)
             ),
 
-            currentUserId: userId,
+            currentUserId: String(userId),
 
             isPurchased: purchasedSet.has(
                 String(feed.note?._id)
@@ -248,7 +232,9 @@ export const getFeeds = async (req: Request, res: Response) => {
 ====================================================== */
 
 export const toggleLikeFeed = async (req: Request, res: Response) => {
-    const userId = (req as any).user.id;
+    /// 🔥 FIX
+    const userId = (req as any).user._id;
+
     const { feedId } = req.params;
 
     try {
@@ -279,7 +265,9 @@ export const toggleLikeFeed = async (req: Request, res: Response) => {
 ====================================================== */
 
 export const registerFeedViews = async (req: Request, res: Response) => {
-    const userId = (req as any)?.user?.id;
+    /// 🔥 MAIN FIX
+    const userId = (req as any)?.user?._id;
+
     const ip = req.ip;
     const { feedId } = req.params;
     let feedIds = req.body?.feedIds;
@@ -325,9 +313,14 @@ export const registerFeedViews = async (req: Request, res: Response) => {
         }
 
         // Increment feed views for all feeds (even repeat views)
-        await Feed.updateMany({ _id: { $in: validFeedIds } }, { $inc: { views: 1 } });
+        await Feed.updateMany(
+            { _id: { $in: validFeedIds } },
+            { $inc: { views: 1 } }
+        );
 
-        validFeedIds.forEach((id: mongoose.Types.ObjectId) => queueFeedScoreUpdate(String(id)));
+        validFeedIds.forEach((id: mongoose.Types.ObjectId) =>
+            queueFeedScoreUpdate(String(id))
+        );
 
         return res.json({ success: true });
     } catch (error: any) {
