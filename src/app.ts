@@ -39,6 +39,8 @@ import payotesRoutes from "./routes/admin/payments/admin.payout.routes";
 
 import pdfViewerRoute from "./routes/utils/pdfViewer.route";
 
+import appRoutes from "./routes/app/app.routes";
+
 const app = express();
 
 /* ===============================
@@ -133,6 +135,9 @@ app.get("/health", (_req, res) => {
 
 // Public
 app.use("/api", authRoutes);
+
+// App Info
+app.use("/api/app", appRoutes);
 
 // Protected
 app.use("/api", uploadRoutes);
